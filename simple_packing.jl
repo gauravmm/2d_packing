@@ -2,21 +2,6 @@ using JuMP
 import GLPK
 import Test
 
-struct Rect
-    w :: Int32
-    h :: Int32
-end
-
-struct Problem
-    problem_class::Int32
-    num::Int32
-    rel_inst::Int32
-    abs_inst::Int32
-    bin_w::Int32
-    bin_h::Int32
-    parts::Vector{Rect}
-end
-
 function popline(f::IOStream)
     line = readline(f)
     if isempty(strip(line))
