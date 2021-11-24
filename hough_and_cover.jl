@@ -39,7 +39,7 @@ function parameter_space_transform(model :: Model, problem :: Problem ; rotation
         part = problem.parts[k]
         for i in 1:(ht+1)
             for j in 1:(wd+1)
-                # The start coordinates an object must be for the value in this cell to be -1
+                # The start coordinates an object must be at for the value in this cell to be -1
                 start_i = i - ht
                 start_j = j - wd
                 # This is part of the constraint we are adding:
