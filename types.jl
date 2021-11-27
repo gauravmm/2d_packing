@@ -20,4 +20,6 @@ struct Solution
     solved::Bool
     bins::Int32
     positions::Vector{CartesianIndex{3}}
+    total_time::Float64
+    last_time::Float64
 end

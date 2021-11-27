@@ -1,42 +1,33 @@
 using JuMP
+import MathOptInterface
 import Cbc
+
 include("types.jl")
+include("positions_and_covering.jl")
 
-# This implements our Hough and Cover technique, which is a derivative of
-# the Positions and Covering (P&C) technique. In this technique, we use the Hough
-# transform (equivalent to Positions step of P&C) and use a cumulative-sum map to
-# ensure no collisions exist.
-# This latter technique is taken from the 1999 Viola-Jones face detection paper that
-# uses Haar Cascades to detect faces.
-function hac_transform(model::Model, problem::Problem, bins::Int;
-        rotations::Bool=false, verbose::Bool=true,
-        incremental_runsum=true)
-    @assert !rotations # Don't support rotations for now.
+"""
+Construct a delta-map of the space, such that:
+    runningsum(deltamap(positions)) == covering(positions)
 
-    np = length(problem.parts)
-    wd = problem.bin_w
-    ht = problem.bin_h
-
-    # This is the first step in the transformation:
-    @variable(model, houghmap[1:np, 1:bins, 1:ht, 1:wd], binary=true, base_name="houghmap")
-
-    for k in 1:np
-        maxy = (ht - problem.parts[k].h + 1)
-        maxx = (wd - problem.parts[k].w + 1)
-        # The object exists at exactly one position:
-        @constraint(model, sum(houghmap[k,:,1:maxy,1:maxx]) == 1)
-        # The object cannot exist at these positions
-        @constraint(model, houghmap[k,:,(maxy + 1):ht,:] .== 0)
-        @constraint(model, houghmap[k,:,:,(maxx + 1):wd] .== 0)
-    end
-
-    # Hough transform complete!
-    # houghmap[k,i,j] is 1 iff object k is at position (i, j).
-    # Now we compress this space to get a delta-map of shape [k, wd + 1, ht + 1], where
-    # iff object k is at (i, j), the value at (k, i, j) is 1 and the position at (k, i+ht, j+wd) is -1.
+By factoring the problem this way, we can establish the same objective with
+fewer conditions.
+"""
+function delta_transform(model::Model, parts::Vector{Rect}, houghmap)
+    (np, bins, ht, wd) = size(houghmap)
+    # Now we compute a delta-map of shape [np, bins, ht, wd], where
+    # iff object k is at (i, j) in bin q, the value:
+    #    at (k, q, i, j) is 1,
+    #    at (k, q, i+part[k].ht, j) is -1,
+    #    at (k, q, i, j+part[k].wd) is -1,
+    #    at (k, q, i+part[k].ht, j+part[k].wd) is 1
+    # This is the _inverse_ transformation to that of the running sum.
+    # (You can think of this is one dimension, and the solution here is the convolution of
+    # that along two dimensions.)
     @variable(model, -1 <= deltamap[1:np, 1:bins, 1:ht, 1:wd] <= 1, integer=true, base_name="deltamap")
+    # While technically the size of deltamap should be [np, bins, ht+1, wd+1], here we
+    # can ignore the last column because the runsum of the output must be zero there.
     for k in 1:np
-        part = problem.parts[k]
+        part = parts[k]
         for q in 1:bins
             for i in 1:ht
                 # The start coordinates an object must be for the value in this cell to be -1
@@ -44,45 +35,92 @@ function hac_transform(model::Model, problem::Problem, bins::Int;
                     start_i = i - part.h
                     start_j = j - part.w
 
-                    # The inverse of the running sum transform:
+                    # The inverse of the running sum transform.
+                    # We are computing the position at which the object must begin to 
+                    # impart +1 or -1 to this cell.
                     cond_bottom = (start_i > 0) ? houghmap[k,q,start_i,j] : 0
                     cond_right = (start_j > 0) ? houghmap[k,q,i,start_j] : 0
                     cond_bottom_right = ((start_i > 0) && (start_j > 0)) ? houghmap[k,q,start_i,start_j] : 0
+
                     @constraint(model, deltamap[k,q,i,j] == houghmap[k,q,i,j] - cond_bottom - cond_right + cond_bottom_right)
                 end
             end
         end
     end
 
-    # Final step in the transform is to construct a running-sum map, similar to that used to
-    # efficiently calculate Haarlike features in the 1999 Viola-Jones Face Detection paper.
-    # The idea is that, at each position (i, j), to compute the running sum of all elements above- and to the left of it. (That is, the sum of [1:i,1:j]).
-    # There are two strategies we can use to compute this:
-    #  (1) Naive (which may be faster for this application?)
-    #  (2) Incrementally, using:
-    #      sum[i, j] := vals[i,j] + sum[i-1, j] + sum[i, j-1] - sum[i-1, j-1]
+    return deltamap
+end
 
-    # The number inside each cell in runsum is the number of objects that span over
-    # that cell. We wish to find an assignment of objects that are non-overlapping,
-    # so all cells must be constrained to be at most one.
+abstract type RunningSumMode end
+struct Naïve <: RunningSumMode end
+struct Incremental <: RunningSumMode end
+
+"""
+At each position (i, j), compute the running sum of all elements above and left of it. (That is, the sum of [1:i,1:j]).
+
+The number inside each cell in runsum is the number of objects that span over
+that cell. We wish to find an assignment of objects that are non-overlapping,
+and we achieve that by constraining all cells to be at most one.
+"""
+function runningsum(model::Model, deltamap; mode::Naïve)
+    # Compute the running sum using the naïve method.
+    _, bins, ht, wd = size(deltamap)
+    # The <= 1 constraint is what prevents objects overlapping:
     @variable(model, 0 <= runsum[1:bins, 1:ht, 1:wd] <= 1, integer=true, base_name="runningsummap")
     for q in 1:bins
         for i in 1:ht
             for j in 1:wd
-                if incremental_runsum
-                    this_cell = sum(deltamap[:,q,i,j])
-
-                    above = (i == 1) ? 0 : ( runsum[q, i - 1, j] )
-                    left  = (j == 1) ? 0 : ( runsum[q, i, j - 1] )
-                    aboveleft = ((i == 1) || (j == 1)) ? 0 : ( runsum[q, i - 1,j - 1] )
-
-                    @constraint(model, runsum[q,i,j] == this_cell + above + left - aboveleft)
-                else
-                    @constraint(model, runsum[q,i,j] == sum(deltamap[:,q,1:i,1:j]))
-                end
+                @constraint(model, runsum[q,i,j] == sum(deltamap[:,q,1:i,1:j]))
             end
         end
     end
+
+    return runsum
+end
+
+function runningsum(model::Model, deltamap; mode::Incremental)
+    np, bins, ht, wd = size(deltamap)
+    # Compute this incrementally, using:
+    #      sum[i, j] := vals[i,j] + sum[i-1, j] + sum[i, j-1] - sum[i-1, j-1]
+    # This is a well-known technique, but I first read it in the 1999 Viola-Jones
+    # Face-recognition paper. There it was used to efficiently compute cascades
+    # of Haarlike filters.
+    @variable(model, 0 <= runsum[1:bins, 1:ht, 1:wd] <= 1, integer=true, base_name="runningsummap")
+    for q in 1:bins
+        for i in 1:ht
+            for j in 1:wd
+                this_cell = sum(deltamap[:,q,i,j])
+
+                above = (i == 1) ? 0 : ( runsum[q, i - 1, j] )
+                left  = (j == 1) ? 0 : ( runsum[q, i, j - 1] )
+                aboveleft = ((i == 1) || (j == 1)) ? 0 : ( runsum[q, i - 1, j - 1] )
+
+                @constraint(model, runsum[q,i,j] == this_cell + above + left - aboveleft)
+            end
+        end
+    end
+
+    return runsum
+end
+
+"""
+This implements Hough and Cover (H&C), which is a derivative of Positions and Covering (P&C). 
+
+We use the Hough transform (equivalent to Positions step of P&C) and use a cumulative-sum map to ensure no collisions exist. The use of a running-sum map (and appropriate pre-transformation) allows us to greatly reduce the number of conditions.
+"""
+function hough_and_cover(model::Model, problem::Problem, bins::Int;
+        rotations::Bool=false, verbose::Bool=true,
+        runsummode::RunningSumMode=Incremental())
+    @assert !rotations # Don't support rotations for now.
+
+    wd = problem.bin_w
+    ht = problem.bin_h
+
+    houghmap = positions(model, problem.parts, bins, ht, wd)
+
+    deltamap = delta_transform(model, problem.parts, houghmap)
+
+    runsum = runningsum(model, deltamap; mode=runsummode)
 
     # Now that we have created the problem, we solve it:
     optimize!(model)
@@ -90,30 +128,22 @@ function hac_transform(model::Model, problem::Problem, bins::Int;
         println("Solved $(termination_status(model)), primal $(primal_status(model))")
         println("Objective: ", objective_value(model))
     end
-    Test.@test termination_status(model) == OPTIMAL
-    Test.@test primal_status(model) == FEASIBLE_POINT
 
-    # Extract the result:
-    valmap = value.(houghmap)
-    coords = Vector{CartesianIndex{3}}()
-
-    for k in 1:np
-        idxes = findall(x -> x == 1, valmap[k,:,:,:])
-        @assert length(idxes) == 1
-        idx = first(idxes)
-        println("element $(k) at $(idx)")
-
-        push!(coords, idx)
+    if termination_status(model) == OPTIMAL && primal_status(model) == FEASIBLE_POINT
+        return positions⁻¹(value.(houghmap))
+    else
+        return nothing
     end
-    return coords
 end
 
-function solver_hac(prob::Problem; prior_num::Int = 1;
-                    bin_search::string = "increment",
+@enum BinPolicy increment twostep minimize
+
+function solver_hac(prob::Problem; prior_num::Int = 1,
+                    bin_search::BinPolicy = increment,
                     optimizer = Cbc.Optimizer)
 
     model = Model(optimizer)
-    set_optimizer_attribute(model, "logLevel", 0)
-    retval = hac_transform(model, prob, 1)
+    # set_optimizer_attribute(model, "logLevel", 0)
+    retval = hough_and_cover(model, prob, 1)
     return retval
 end

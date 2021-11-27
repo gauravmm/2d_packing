@@ -60,7 +60,7 @@ function main(; from_unibo=["Class_02.2bp"], do_first=1)
     end
 end
 
-main()
+#main()
 
 function check_solution(prob, soln)
     return true
@@ -72,19 +72,19 @@ function do_basic_tests(solver)
         Problem(1, 1, 0, 0, 4, 4, [Rect(2, 2)])
         Problem(1, 1, 0, 0, 4, 4, [Rect(3, 3)])
         Problem(1, 1, 0, 0, 4, 4, [Rect(4, 4)])
-        Problem(1, 1, 0, 0, 4, 4, [Rect(2, 2), Rect(2, 2)])
-        Problem(1, 1, 0, 0, 4, 4, [Rect(3, 1), Rect(2, 2)])
-        Problem(1, 1, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 2)])
-        Problem(1, 1, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 3)])
+        Problem(1, 2, 0, 0, 4, 4, [Rect(2, 2), Rect(2, 2)])
+        Problem(1, 2, 0, 0, 4, 4, [Rect(3, 1), Rect(2, 2)])
+        Problem(1, 2, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 2)])
+        Problem(1, 2, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 3)])
     ]
 
-    for prob in problems
+    for (i, prob) in enumerate(problems)
         soln = solver(prob)
-        Test.@test check_solution(prob, soln)
+        verify = check_solution(prob, soln)
+        println("$(i)\t$(verify)\t$(soln.bins)\t$(round(soln.time*1000, 1)) ms")
     end
 
     println("Done!")
-
 end
 
-# do_basic_tests()
+do_basic_tests(solver_hac)
