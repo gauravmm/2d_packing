@@ -1,6 +1,11 @@
+import Pkg
+Pkg.activate(".")
+
 using JuMP
 import GLPK
 import Test
+
+include("hough_and_cover.jl")
 
 function popline(f::IOStream)
     line = readline(f)
@@ -19,8 +24,6 @@ function build_problems_unibo(fn; basepath = "data/unibo/")
     pat = normpath(joinpath(basepath, fn))
 
     problems = Vector{Problem}()
-    # next = Problem()
-
     open(pat) do f
         while !eof(f)
             problem_class, _ = popline(f)
@@ -44,12 +47,38 @@ function build_problems_unibo(fn; basepath = "data/unibo/")
     return problems
 end
 
-function main(; from_files=["Class_01.2bp"], do_first=1)
-    for filename in from_files
+function main(; from_unibo=["Class_02.2bp"], do_first=1)
+    for filename in from_unibo
         problems = build_problems_unibo(filename)
-        print("Loaded $(length(problems)) problems from $filename")
+        println("Loaded $(length(problems)) problems from $filename")
 
+        for i in 1:( do_first > 0 ? do_first : length(problems))
+            println("Solving $(i)...")
+            hac_solve(problems[i])
+            println("Done!")
+        end
     end
 end
 
-main()
+# main()
+
+function do_basic_tests()
+    # Create and test some simple problems:
+    println("Solving 4x4 grid, 1 object (2x2)")
+    prob01 = Problem(1, 1, 0, 0, 4, 4, [Rect(2, 2)])
+    println(hac_solve(prob01))
+    println("Done!")
+
+    println("Solving 4x4 grid, 1 object (3x3)")
+    prob02 = Problem(1, 1, 0, 0, 4, 4, [Rect(3, 3)])
+    println(hac_solve(prob02))
+    println("Done!")
+
+    println("Solving 4x4 grid, 1 object (4x4)")
+    prob03 = Problem(1, 1, 0, 0, 4, 4, [Rect(4, 4)])
+    println(hac_solve(prob03))
+    println("Done!")
+
+end
+
+do_basic_tests()
