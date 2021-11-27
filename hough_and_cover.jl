@@ -20,7 +20,7 @@ function hac_transform(model::Model, problem::Problem ; rotations::Bool=false, v
     ht = problem.bin_h
 
     # This is the first step in the transformation:
-    @variable(model, houghmap[1:np, 1:ht, 1:wd], binary = true, base_name = "houghmap")
+    @variable(model, houghmap[1:np, 1:ht, 1:wd], binary=true, base_name="houghmap")
 
     for k in 1:np
         maxy = (ht - problem.parts[k].h + 1)
@@ -36,17 +36,17 @@ function hac_transform(model::Model, problem::Problem ; rotations::Bool=false, v
     # houghmap[k,i,j] is 1 iff object k is at position (i, j).
     # Now we compress this space to get a delta-map of shape [k, wd + 1, ht + 1], where
     # iff object k is at (i, j), the value at (k, i, j) is 1 and the position at (k, i+ht, j+wd) is -1.
-    @variable(model, -1 <= deltamap[1:np, 1:(ht + 1), 1:(wd + 1)] <= 1, integer=true, base_name = "deltamap")
+    @variable(model, -1 <= deltamap[1:np, 1:ht, 1:wd] <= 1, integer=true, base_name="deltamap")
     for k in 1:np
         part = problem.parts[k]
-        for i in 1:(ht + 1)
+        for i in 1:ht
             # The start coordinates an object must be for the value in this cell to be -1
-            for j in 1:(wd + 1)
+            for j in 1:wd
                 start_i = i - part.h
                 start_j = j - part.w
                 # This is part of the constraint we are adding:
                 cond_minus = ((start_i > 0) && (start_j > 0)) ? houghmap[k,start_i,start_j] : 0
-                cond_plus = ((i <= ht) && (j <= wd)) ? houghmap[k,i,j] : 0
+                cond_plus = houghmap[k,i,j]
                 @constraint(model, deltamap[k,i,j] == cond_plus - cond_minus)
             end
         end
@@ -63,9 +63,9 @@ function hac_transform(model::Model, problem::Problem ; rotations::Bool=false, v
     # The number inside each cell in runsum is the number of objects that span over
     # that cell. We wish to find an assignment of objects that are non-overlapping,
     # so all cells must be constrained to be at most one.
-    @variable(model, 0 <= runsum[1:(ht + 1), 1:(wd + 1)] <= np, integer = true, base_name = "runningsummap")
-    for i in 1:(ht + 1)
-        for j in 1:(wd + 1)
+    @variable(model, runsum[1:ht, 1:wd] <= 1, integer=true, base_name="runningsummap")
+    for i in 1:ht
+        for j in 1:wd
             """
             this_cell = sum(deltamap[:,i,j])
 
@@ -78,8 +78,6 @@ function hac_transform(model::Model, problem::Problem ; rotations::Bool=false, v
             @constraint(model, runsum[i,j] == sum(deltamap[:,1:i,1:j]))
         end
     end
-
-    #@objective(model, Min, sum(runsum));
 
     # Now that we have created the problem, we solve it:
     optimize!(model)

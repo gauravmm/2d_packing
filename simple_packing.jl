@@ -65,18 +65,25 @@ end
 function do_basic_tests()
     # Create and test some simple problems:
     println("Solving 4x4 grid, 1 object (2x2)")
-    prob01 = Problem(1, 1, 0, 0, 4, 4, [Rect(2, 2)])
-    println(hac_solve(prob01))
-    println("Done!")
+    prob = Problem(1, 1, 0, 0, 4, 4, [Rect(2, 2)])
+    println(hac_solve(prob))
 
     println("Solving 4x4 grid, 1 object (3x3)")
-    prob02 = Problem(1, 1, 0, 0, 4, 4, [Rect(3, 3)])
-    println(hac_solve(prob02))
-    println("Done!")
+    prob = Problem(1, 1, 0, 0, 4, 4, [Rect(3, 3)])
+    println(hac_solve(prob))
 
     println("Solving 4x4 grid, 1 object (4x4)")
-    prob03 = Problem(1, 1, 0, 0, 4, 4, [Rect(4, 4)])
-    println(hac_solve(prob03))
+    prob = Problem(1, 1, 0, 0, 4, 4, [Rect(4, 4)])
+    println(hac_solve(prob))
+
+    println("Solving 4x4 grid, 2 object (2x2)")
+    prob = Problem(1, 1, 0, 0, 4, 4, [Rect(2, 2), Rect(2, 2)])
+    println(hac_solve(prob))
+
+    println("Solving 4x4 grid, 2 object (2x3, 2x2)")
+    prob = Problem(1, 1, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 2)])
+    println(hac_solve(prob))
+
     println("Done!")
 
 end
