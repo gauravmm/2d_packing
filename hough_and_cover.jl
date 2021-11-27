@@ -8,7 +8,7 @@ include("types.jl")
 # ensure no collisions exist.
 # This latter technique is taken from the 1999 Viola-Jones face detection paper that
 # uses Haar Cascades to detect faces.
-function hac_transform(model::Model, problem::Problem;
+function hac_transform(model::Model, problem::Problem, bins::Int;
         rotations::Bool=false, verbose::Bool=true,
         incremental_runsum=true)
     @assert !rotations # Don't support rotations for now.
@@ -18,35 +18,38 @@ function hac_transform(model::Model, problem::Problem;
     ht = problem.bin_h
 
     # This is the first step in the transformation:
-    @variable(model, houghmap[1:np, 1:ht, 1:wd], binary=true, base_name="houghmap")
+    @variable(model, houghmap[1:np, 1:bins, 1:ht, 1:wd], binary=true, base_name="houghmap")
 
     for k in 1:np
         maxy = (ht - problem.parts[k].h + 1)
         maxx = (wd - problem.parts[k].w + 1)
         # The object exists at exactly one position:
-        @constraint(model, sum(houghmap[k,1:maxy,1:maxx]) == 1)
+        @constraint(model, sum(houghmap[k,:,1:maxy,1:maxx]) == 1)
         # The object cannot exist at these positions
-        @constraint(model, houghmap[k,(maxy + 1):ht,:] .== 0)
-        @constraint(model, houghmap[k,:,(maxx + 1):wd] .== 0)
+        @constraint(model, houghmap[k,:,(maxy + 1):ht,:] .== 0)
+        @constraint(model, houghmap[k,:,:,(maxx + 1):wd] .== 0)
     end
 
     # Hough transform complete!
     # houghmap[k,i,j] is 1 iff object k is at position (i, j).
     # Now we compress this space to get a delta-map of shape [k, wd + 1, ht + 1], where
     # iff object k is at (i, j), the value at (k, i, j) is 1 and the position at (k, i+ht, j+wd) is -1.
-    @variable(model, -1 <= deltamap[1:np, 1:ht, 1:wd] <= 1, integer=true, base_name="deltamap")
+    @variable(model, -1 <= deltamap[1:np, 1:bins, 1:ht, 1:wd] <= 1, integer=true, base_name="deltamap")
     for k in 1:np
         part = problem.parts[k]
-        for i in 1:ht
-            # The start coordinates an object must be for the value in this cell to be -1
-            for j in 1:wd
-                start_i = i - part.h
-                start_j = j - part.w
-                # This is part of the constraint we are adding:
-                cond_bottom = (start_i > 0) ? houghmap[k,start_i,j] : 0
-                cond_right = (start_j > 0) ? houghmap[k,i,start_j] : 0
-                cond_bottom_right = ((start_i > 0) && (start_j > 0)) ? houghmap[k,start_i,start_j] : 0
-                @constraint(model, deltamap[k,i,j] == houghmap[k,i,j] - cond_bottom - cond_right + cond_bottom_right)
+        for q in 1:bins
+            for i in 1:ht
+                # The start coordinates an object must be for the value in this cell to be -1
+                for j in 1:wd
+                    start_i = i - part.h
+                    start_j = j - part.w
+
+                    # The inverse of the running sum transform:
+                    cond_bottom = (start_i > 0) ? houghmap[k,q,start_i,j] : 0
+                    cond_right = (start_j > 0) ? houghmap[k,q,i,start_j] : 0
+                    cond_bottom_right = ((start_i > 0) && (start_j > 0)) ? houghmap[k,q,start_i,start_j] : 0
+                    @constraint(model, deltamap[k,q,i,j] == houghmap[k,q,i,j] - cond_bottom - cond_right + cond_bottom_right)
+                end
             end
         end
     end
@@ -62,19 +65,21 @@ function hac_transform(model::Model, problem::Problem;
     # The number inside each cell in runsum is the number of objects that span over
     # that cell. We wish to find an assignment of objects that are non-overlapping,
     # so all cells must be constrained to be at most one.
-    @variable(model, 0 <= runsum[1:ht, 1:wd] <= 1, integer=true, base_name="runningsummap")
-    for i in 1:ht
-        for j in 1:wd
-            if incremental_runsum
-                this_cell = sum(deltamap[:,i,j])
+    @variable(model, 0 <= runsum[1:bins, 1:ht, 1:wd] <= 1, integer=true, base_name="runningsummap")
+    for q in 1:bins
+        for i in 1:ht
+            for j in 1:wd
+                if incremental_runsum
+                    this_cell = sum(deltamap[:,q,i,j])
 
-                above = (i == 1) ? 0 : ( runsum[i - 1, j] )
-                left  = (j == 1) ? 0 : ( runsum[i, j - 1] )
-                aboveleft = ((i == 1) || (j == 1)) ? 0 : ( runsum[i - 1,j - 1] )
+                    above = (i == 1) ? 0 : ( runsum[q, i - 1, j] )
+                    left  = (j == 1) ? 0 : ( runsum[q, i, j - 1] )
+                    aboveleft = ((i == 1) || (j == 1)) ? 0 : ( runsum[q, i - 1,j - 1] )
 
-                @constraint(model, runsum[i,j] == this_cell + above + left - aboveleft)
-            else
-                @constraint(model, runsum[i,j] == sum(deltamap[:,1:i,1:j]))
+                    @constraint(model, runsum[q,i,j] == this_cell + above + left - aboveleft)
+                else
+                    @constraint(model, runsum[q,i,j] == sum(deltamap[:,q,1:i,1:j]))
+                end
             end
         end
     end
@@ -90,10 +95,10 @@ function hac_transform(model::Model, problem::Problem;
 
     # Extract the result:
     valmap = value.(houghmap)
-    coords = Vector{CartesianIndex{2}}()
+    coords = Vector{CartesianIndex{3}}()
 
     for k in 1:np
-        idxes = findall(x -> x == 1, valmap[k,:,:])
+        idxes = findall(x -> x == 1, valmap[k,:,:,:])
         @assert length(idxes) == 1
         idx = first(idxes)
         println("element $(k) at $(idx)")
@@ -103,10 +108,12 @@ function hac_transform(model::Model, problem::Problem;
     return coords
 end
 
-function hac_solve(prob::Problem)
-    model = Model(GLPK.Optimizer)
-    # model = Model(Cbc.Optimizer)
-    retval = hac_transform(model, prob)
+function solver_hac(prob::Problem; prior_num::Int = 1;
+                    bin_search::string = "increment",
+                    optimizer = Cbc.Optimizer)
 
+    model = Model(optimizer)
+    set_optimizer_attribute(model, "logLevel", 0)
+    retval = hac_transform(model, prob, 1)
     return retval
 end

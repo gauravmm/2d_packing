@@ -15,3 +15,9 @@ struct Problem
     bin_h::Int32
     parts::Vector{Rect}
 end
+
+struct Solution
+    solved::Bool
+    bins::Int32
+    positions::Vector{CartesianIndex{3}}
+end

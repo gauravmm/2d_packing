@@ -54,7 +54,7 @@ function main(; from_unibo=["Class_02.2bp"], do_first=1)
 
         for i in 1:( do_first > 0 ? do_first : length(problems))
             println("Solving $(i)...")
-            hac_solve(problems[i])
+            solver_hac(problems[i])
             println("Done!")
         end
     end
@@ -62,31 +62,26 @@ end
 
 main()
 
-function do_basic_tests()
+function check_solution(prob, soln)
+    return true
+end
+
+function do_basic_tests(solver)
     # Create and test some simple problems:
-    println("Solving 4x4 grid, 1 object (2x2)")
-    prob = Problem(1, 1, 0, 0, 4, 4, [Rect(2, 2)])
-    println(hac_solve(prob))
+    problems = [
+        Problem(1, 1, 0, 0, 4, 4, [Rect(2, 2)])
+        Problem(1, 1, 0, 0, 4, 4, [Rect(3, 3)])
+        Problem(1, 1, 0, 0, 4, 4, [Rect(4, 4)])
+        Problem(1, 1, 0, 0, 4, 4, [Rect(2, 2), Rect(2, 2)])
+        Problem(1, 1, 0, 0, 4, 4, [Rect(3, 1), Rect(2, 2)])
+        Problem(1, 1, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 2)])
+        Problem(1, 1, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 3)])
+    ]
 
-    println("Solving 4x4 grid, 1 object (3x3)")
-    prob = Problem(1, 1, 0, 0, 4, 4, [Rect(3, 3)])
-    println(hac_solve(prob))
-
-    println("Solving 4x4 grid, 1 object (4x4)")
-    prob = Problem(1, 1, 0, 0, 4, 4, [Rect(4, 4)])
-    println(hac_solve(prob))
-
-    println("Solving 4x4 grid, 2 object (2x2)")
-    prob = Problem(1, 1, 0, 0, 4, 4, [Rect(2, 2), Rect(2, 2)])
-    println(hac_solve(prob))
-
-    println("Solving 4x4 grid, 2 object (3x1, 2x2)")
-    prob = Problem(1, 1, 0, 0, 4, 4, [Rect(3, 1), Rect(2, 2)])
-    println(hac_solve(prob))
-
-    println("Solving 4x4 grid, 2 object (2x3, 2x2)")
-    prob = Problem(1, 1, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 2)])
-    println(hac_solve(prob))
+    for prob in problems
+        soln = solver(prob)
+        Test.@test check_solution(prob, soln)
+    end
 
     println("Done!")
 
