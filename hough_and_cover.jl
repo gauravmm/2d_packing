@@ -126,7 +126,7 @@ function hough_and_cover(model::Model, problem::Problem, bins::Int;
     optimize!(model)
     if verbose
         println("Solved $(termination_status(model)), primal $(primal_status(model))")
-        println("Objective: ", objective_value(model))
+        # println("Objective: ", objective_value(model))
     end
 
     if termination_status(model) == OPTIMAL && primal_status(model) == FEASIBLE_POINT
@@ -136,14 +136,34 @@ function hough_and_cover(model::Model, problem::Problem, bins::Int;
     end
 end
 
-@enum BinPolicy increment twostep minimize
+@enum BinPolicy increment
 
-function solver_hac(prob::Problem; prior_num::Int = 1,
+function solver_hac(prob::Problem; known_bins::Int = 0,
                     bin_search::BinPolicy = increment,
                     optimizer = Cbc.Optimizer)
 
-    model = Model(optimizer)
-    # set_optimizer_attribute(model, "logLevel", 0)
-    retval = hough_and_cover(model, prob, 1)
-    return retval
+
+    @assert bin_search == increment
+
+    lb, ub = bin_bounds(prob)
+    if known_bins > 0
+        lb, ub = known_bins
+    end
+
+    start_time = time_ns()
+    bins = lb
+    while bins <= ub
+        last_time = time_ns()
+        model = Model(optimizer)
+        retval = hough_and_cover(model, prob, bins)
+
+        if !isnothing(retval)
+            # We have a solution!
+            end_time = time_ns()
+            return Solution(true, bins, retval, end_time - start_time, end_time - last_time)
+        end
+        bins += 1
+    end
+    println("Oops! We failed to find a solution with bins in ($lb, $ub)")
+    return nothing
 end

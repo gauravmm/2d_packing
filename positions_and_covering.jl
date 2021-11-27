@@ -48,4 +48,27 @@ function positions⁻¹(valmap::Array{Float64,4}; rotations::Bool=false)
         @assert length(idxes) == 1
         coords[k] = first(idxes)
     end
+
+    return coords
+end
+
+"""
+Given a problem, finds initial bounds on the number of bins:
+"""
+function bin_bounds(problem::Problem)
+    area_per_bin = problem.bin_h * problem.bin_w
+    area_objects = sum([r.w * r.h for r in problem.parts])
+
+    # This is the lower bound imposed by the total covered area:
+    # cld is ceiling(division(nanny, donkey)):
+    lower_bound = Int(cld(area_objects, area_per_bin))
+
+    # Upper bound:
+    # A trivial upper bound is four times the lower bound, because it is
+    # guaranteed to be higher than the case where (under optimal packing)
+    # each bin is slightly more than half full along each axis.
+    # In higher-dimensional problems, this gets exponentially worse.
+    upper_bound = 4*lower_bound
+
+    return (lower_bound, upper_bound)
 end

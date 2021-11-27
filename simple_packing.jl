@@ -63,7 +63,7 @@ end
 #main()
 
 function check_solution(prob, soln)
-    return true
+    println(soln)
 end
 
 function do_basic_tests(solver)
@@ -76,12 +76,17 @@ function do_basic_tests(solver)
         Problem(1, 2, 0, 0, 4, 4, [Rect(3, 1), Rect(2, 2)])
         Problem(1, 2, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 2)])
         Problem(1, 2, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 3)])
+        Problem(1, 2, 0, 0, 4, 4, [Rect(3, 3), Rect(2, 3)])
     ]
 
     for (i, prob) in enumerate(problems)
         soln = solver(prob)
-        verify = check_solution(prob, soln)
-        println("$(i)\t$(verify)\t$(soln.bins)\t$(round(soln.time*1000, 1)) ms")
+        if isnothing(soln)
+            println("|> $(i)\tNO SOLUTION")
+        else
+            verify = check_solution(prob, soln)
+            println("|> $(i)\t$(verify)\t$(soln.bins)\t$(round(soln.total_time / 10^6)) ms")
+        end
     end
 
     println("Done!")
