@@ -8,11 +8,9 @@ include("types.jl")
 # ensure no collisions exist.
 # This latter technique is taken from the 1999 Viola-Jones face detection paper that
 # uses Haar Cascades to detect faces.
-function hac_transform(model::Model, problem::Problem ; rotations::Bool=false, verbose::Bool=true)
-    # This function performs the hough-and-cover transform, producing
-
-    # This function constructs a positions map where the cell at (k, y, x) == 1
-    # when positions[k].y == y and positions[k].x == x.
+function hac_transform(model::Model, problem::Problem;
+        rotations::Bool=false, verbose::Bool=true,
+        incremental_runsum=true)
     @assert !rotations # Don't support rotations for now.
 
     np = length(problem.parts)
@@ -45,9 +43,10 @@ function hac_transform(model::Model, problem::Problem ; rotations::Bool=false, v
                 start_i = i - part.h
                 start_j = j - part.w
                 # This is part of the constraint we are adding:
-                cond_minus = ((start_i > 0) && (start_j > 0)) ? houghmap[k,start_i,start_j] : 0
-                cond_plus = houghmap[k,i,j]
-                @constraint(model, deltamap[k,i,j] == cond_plus - cond_minus)
+                cond_bottom = (start_i > 0) ? houghmap[k,start_i,j] : 0
+                cond_right = (start_j > 0) ? houghmap[k,i,start_j] : 0
+                cond_bottom_right = ((start_i > 0) && (start_j > 0)) ? houghmap[k,start_i,start_j] : 0
+                @constraint(model, deltamap[k,i,j] == houghmap[k,i,j] - cond_bottom - cond_right + cond_bottom_right)
             end
         end
     end
@@ -63,19 +62,20 @@ function hac_transform(model::Model, problem::Problem ; rotations::Bool=false, v
     # The number inside each cell in runsum is the number of objects that span over
     # that cell. We wish to find an assignment of objects that are non-overlapping,
     # so all cells must be constrained to be at most one.
-    @variable(model, runsum[1:ht, 1:wd] <= 1, integer=true, base_name="runningsummap")
+    @variable(model, 0 <= runsum[1:ht, 1:wd] <= 1, integer=true, base_name="runningsummap")
     for i in 1:ht
         for j in 1:wd
-            """
-            this_cell = sum(deltamap[:,i,j])
+            if incremental_runsum
+                this_cell = sum(deltamap[:,i,j])
 
-            above = (i == 1) ? 0 : ( runsum[i - 1, j] )
-            left  = (j == 1) ? 0 : ( runsum[i, j - 1] )
-            aboveleft = ((i == 1) || (j == 1)) ? 0 : ( runsum[i - 1,j - 1] )
+                above = (i == 1) ? 0 : ( runsum[i - 1, j] )
+                left  = (j == 1) ? 0 : ( runsum[i, j - 1] )
+                aboveleft = ((i == 1) || (j == 1)) ? 0 : ( runsum[i - 1,j - 1] )
 
-            @constraint(model, runsum[i,j] == this_cell + above + left - aboveleft)
-            """
-            @constraint(model, runsum[i,j] == sum(deltamap[:,1:i,1:j]))
+                @constraint(model, runsum[i,j] == this_cell + above + left - aboveleft)
+            else
+                @constraint(model, runsum[i,j] == sum(deltamap[:,1:i,1:j]))
+            end
         end
     end
 

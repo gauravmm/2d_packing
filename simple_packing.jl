@@ -60,7 +60,7 @@ function main(; from_unibo=["Class_02.2bp"], do_first=1)
     end
 end
 
-# main()
+main()
 
 function do_basic_tests()
     # Create and test some simple problems:
@@ -80,6 +80,10 @@ function do_basic_tests()
     prob = Problem(1, 1, 0, 0, 4, 4, [Rect(2, 2), Rect(2, 2)])
     println(hac_solve(prob))
 
+    println("Solving 4x4 grid, 2 object (3x1, 2x2)")
+    prob = Problem(1, 1, 0, 0, 4, 4, [Rect(3, 1), Rect(2, 2)])
+    println(hac_solve(prob))
+
     println("Solving 4x4 grid, 2 object (2x3, 2x2)")
     prob = Problem(1, 1, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 2)])
     println(hac_solve(prob))
@@ -88,4 +92,4 @@ function do_basic_tests()
 
 end
 
-do_basic_tests()
+# do_basic_tests()
