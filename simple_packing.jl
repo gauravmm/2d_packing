@@ -100,6 +100,8 @@ function check_solution(prob, soln)
     return true
 end
 
-
-main(hough_and_cover, problems_from_unibo(do_first=1))
-#do_basic_tests(positions_and_covering)
+problems = problems_from_unibo(do_first=25)
+println("|> POSITIONS AND COVERING")
+main(positions_and_covering, problems)
+println("|> HOUGH AND COVER")
+main(hough_and_cover, problems)
