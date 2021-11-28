@@ -19,6 +19,19 @@ function popline(f::IOStream)
     return [parse(Int32, left) (isempty(right) ? -1 : parse(Int32, right))]
 end
 
+function build_problems_basic()
+    return [
+        Problem(1, 1, 0, 0, 4, 4, [Rect(2, 2)])
+        Problem(1, 1, 0, 0, 4, 4, [Rect(3, 3)])
+        Problem(1, 1, 0, 0, 4, 4, [Rect(4, 4)])
+        Problem(1, 2, 0, 0, 4, 4, [Rect(2, 2), Rect(2, 2)])
+        Problem(1, 2, 0, 0, 4, 4, [Rect(3, 1), Rect(2, 2)])
+        Problem(1, 2, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 2)])
+        Problem(1, 2, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 3)])
+        Problem(1, 2, 0, 0, 4, 4, [Rect(3, 3), Rect(2, 3)])
+    ]
+end
+
 function build_problems_unibo(fn; basepath = "data/unibo/")
     # Build a problem from the UNIBO files
     pat = normpath(joinpath(basepath, fn))
@@ -47,40 +60,14 @@ function build_problems_unibo(fn; basepath = "data/unibo/")
     return problems
 end
 
-function main(; from_unibo=["Class_02.2bp"], do_first=1)
-    for filename in from_unibo
-        problems = build_problems_unibo(filename)
-        println("Loaded $(length(problems)) problems from $filename")
-
-        for i in 1:( do_first > 0 ? do_first : length(problems))
-            println("Solving $(i)...")
-            solver_hac(problems[i])
-            println("Done!")
-        end
-    end
-end
-
-#main()
-
-function check_solution(prob, soln)
-    println(soln)
-end
-
-function do_basic_tests(solver)
-    # Create and test some simple problems:
-    problems = [
-        Problem(1, 1, 0, 0, 4, 4, [Rect(2, 2)])
-        Problem(1, 1, 0, 0, 4, 4, [Rect(3, 3)])
-        Problem(1, 1, 0, 0, 4, 4, [Rect(4, 4)])
-        Problem(1, 2, 0, 0, 4, 4, [Rect(2, 2), Rect(2, 2)])
-        Problem(1, 2, 0, 0, 4, 4, [Rect(3, 1), Rect(2, 2)])
-        Problem(1, 2, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 2)])
-        Problem(1, 2, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 3)])
-        Problem(1, 2, 0, 0, 4, 4, [Rect(3, 3), Rect(2, 3)])
-    ]
+function main(solver, problems)
+    println("Burn-in test")
+    soln = solver_incremental(Problem(1, 1, 0, 0, 4, 4, [Rect(2, 2)]), solver_func=solver)
+    @assert !isnothing(soln)
+    println("Compilation time ~$(round(soln.total_time / 10^6)) ms")
 
     for (i, prob) in enumerate(problems)
-        soln = solver(prob)
+        soln = solver_incremental(problems[i], solver_func=solver)
         if isnothing(soln)
             println("|> $(i)\tNO SOLUTION")
         else
@@ -92,4 +79,27 @@ function do_basic_tests(solver)
     println("Done!")
 end
 
-do_basic_tests(solver_hac)
+function problems_from_unibo(;filenames::Vector{String}=["Class_02.2bp"], do_first=0)
+    problems = Vector{}()
+    for filename in filenames
+        np = build_problems_unibo(filename)
+        if isnothing(np)
+            println("Error loading from $filename")
+        else
+            append!(problems, np)
+            println("Loaded $(length(np)) problems from $filename")
+        end
+    end
+    if do_first > 0 && do_first < length(problems)
+        return problems[1:do_first]
+    end
+    return problems
+end
+
+function check_solution(prob, soln)
+    return true
+end
+
+
+main(hough_and_cover, problems_from_unibo(do_first=1))
+#do_basic_tests(positions_and_covering)

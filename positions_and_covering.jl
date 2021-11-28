@@ -72,3 +72,85 @@ function bin_bounds(problem::Problem)
 
     return (lower_bound, upper_bound)
 end
+
+function covering(model::Model, parts::Vector{Rect}, houghmap)
+    (np, bins, ht, wd) = size(houghmap)
+    # Now we compute a covering of shape [np, bins, ht, wd], where
+    # iff object k is at (i, j) in bin q, the value at (k, q, i:i+h-1, j:j+w-1) is 1
+    @variable(model, covering[1:np, 1:bins, 1:ht, 1:wd] <= 1, integer=true, base_name="covermap")
+
+    for k in 1:np
+        part = parts[k]
+        maxy = (ht - part.h + 1)
+        maxx = (wd - part.w + 1)
+
+        for q in 1:bins
+            for i in 1:maxy
+                for j in 1:maxx
+                    # We use >= so that the cell in the covering is 1 if the original position
+                    # is anywhere such that the object overlaps.
+                    @constraint(model, covering[k,q,i:(i+part.h-1),j:(j+part.w-1)] .>= houghmap[k,q,i,j])
+                end
+            end
+        end
+    end
+
+    # Now we add the no-overlapping covering:
+    for q in 1:bins
+        for i in 1:ht
+            for j in 1:wd
+                @constraint(model, sum(covering[:,q,i,j]) <= 1)
+            end
+        end
+    end
+    return covering
+end
+
+"""
+This implements Positions and Covering (P&C)
+"""
+function positions_and_covering(model::Model, problem::Problem, bins::Int;
+        rotations::Bool=false)
+    @assert !rotations # Don't support rotations for now.
+
+    # houghmap contains x^i_{jk} from the P&C paper
+    houghmap = positions(model, problem.parts, bins, problem.bin_h, problem.bin_w)
+    # covermap contains C, the correspondence matrix
+    covermap = covering(model, problem.parts, houghmap)
+
+    # Now that we have created the problem, we solve it:
+    optimize!(model)
+    if termination_status(model) == OPTIMAL && primal_status(model) == FEASIBLE_POINT
+        return positions⁻¹(value.(houghmap))
+    end
+    return nothing
+end
+
+"""
+Run P&C (or H&C) across a range of bins, increasing the bin size on each failure. 
+"""
+function solver_incremental(prob::Problem; known_bins::Int = 0,
+                    solver_func=positions_and_covering,
+                    optimizer=Cbc.Optimizer)
+    lb, ub = bin_bounds(prob)
+    if known_bins > 0
+        lb, ub = known_bins
+    end
+
+    start_time = time_ns()
+    bins = lb
+    while bins <= ub
+        last_time = time_ns()
+        model = Model(optimizer)
+        retval = solver_func(model, prob, bins)
+
+        if !isnothing(retval)
+            # We have a solution!
+            end_time = time_ns()
+            return Solution(true, bins, retval, end_time - start_time, end_time - last_time)
+        end
+        bins += 1
+    end
+    println("Oops! We failed to find a solution with bins in ($lb, $ub)")
+    return nothing
+end

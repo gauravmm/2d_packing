@@ -104,7 +104,7 @@ function runningsum(model::Model, deltamap; mode::Incremental)
 end
 
 """
-This implements Hough and Cover (H&C), which is a derivative of Positions and Covering (P&C). 
+This implements Hough and Cover (H&C), which is a derivative of Positions and Covering (P&C).
 
 We use the Hough transform (equivalent to Positions step of P&C) and use a cumulative-sum map to ensure no collisions exist. The use of a running-sum map (and appropriate pre-transformation) allows us to greatly reduce the number of conditions.
 """
@@ -113,57 +113,14 @@ function hough_and_cover(model::Model, problem::Problem, bins::Int;
         runsummode::RunningSumMode=Incremental())
     @assert !rotations # Don't support rotations for now.
 
-    wd = problem.bin_w
-    ht = problem.bin_h
-
-    houghmap = positions(model, problem.parts, bins, ht, wd)
-
+    houghmap = positions(model, problem.parts, bins, problem.bin_h, problem.bin_w)
     deltamap = delta_transform(model, problem.parts, houghmap)
-
     runsum = runningsum(model, deltamap; mode=runsummode)
 
     # Now that we have created the problem, we solve it:
     optimize!(model)
-    if verbose
-        println("Solved $(termination_status(model)), primal $(primal_status(model))")
-        # println("Objective: ", objective_value(model))
-    end
-
     if termination_status(model) == OPTIMAL && primal_status(model) == FEASIBLE_POINT
         return positions⁻¹(value.(houghmap))
-    else
-        return nothing
     end
-end
-
-@enum BinPolicy increment
-
-function solver_hac(prob::Problem; known_bins::Int = 0,
-                    bin_search::BinPolicy = increment,
-                    optimizer = Cbc.Optimizer)
-
-
-    @assert bin_search == increment
-
-    lb, ub = bin_bounds(prob)
-    if known_bins > 0
-        lb, ub = known_bins
-    end
-
-    start_time = time_ns()
-    bins = lb
-    while bins <= ub
-        last_time = time_ns()
-        model = Model(optimizer)
-        retval = hough_and_cover(model, prob, bins)
-
-        if !isnothing(retval)
-            # We have a solution!
-            end_time = time_ns()
-            return Solution(true, bins, retval, end_time - start_time, end_time - last_time)
-        end
-        bins += 1
-    end
-    println("Oops! We failed to find a solution with bins in ($lb, $ub)")
     return nothing
 end
