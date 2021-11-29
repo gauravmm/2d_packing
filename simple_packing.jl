@@ -69,10 +69,10 @@ function main(solver, problems)
     for (i, prob) in enumerate(problems)
         soln = solver_incremental(problems[i], solver_func=solver)
         if isnothing(soln)
-            println("|> $(i)\tNO SOLUTION")
+            println("\n|> $(i)\tNO SOLUTION")
         else
             verify = check_solution(prob, soln)
-            println("|> $(i)\t$(verify)\t$(soln.bins)\t$(round(soln.total_time / 10^6)) ms")
+            println("\n|> $(i)\t$(verify)\t$(soln.bins)\t$(round(soln.total_time / 10^6)/1000) s")
         end
     end
 
@@ -96,12 +96,42 @@ function problems_from_unibo(;filenames::Vector{String}=["Class_02.2bp"], do_fir
     return problems
 end
 
-function check_solution(prob, soln)
+function check_solution(prob::Problem, soln::Solution)
+    if isnothing(soln)
+        return false
+    end
+    bins = soln.bins
+    testarr = zeros(Int32, bins, prob.bin_h, prob.bin_w)
+    ht = prob.bin_h
+    wd = prob.bin_w
+
+    for (part::Rect, pos::CartesianIndex{3}) in zip(prob.parts, soln.positions)
+        bin, i, j = Tuple(pos)
+        if bin <= 0 || bin > bins || i <= 0 || i + part.h - 1 > ht || j <= 0 || j + part.w - 1 > wd
+            println("|>     Coordinate out of bounds $bin, $i, $j")
+        end
+
+        testarr[bin,i:(i+part.h-1),j:(j+part.w-1)] .+= 1
+    end
+
+    if maximum(testarr) > 1
+        println("|>     Overlapping bins.")
+        return false
+    end
+
     return true
 end
 
-problems = problems_from_unibo(do_first=25)
-println("|> POSITIONS AND COVERING")
-main(positions_and_covering, problems)
-println("|> HOUGH AND COVER")
-main(hough_and_cover, problems)
+if true
+    println("UNIBO")
+    problems = problems_from_unibo(do_first=5)
+    println("|> HOUGH AND COVER")
+    main(hough_and_cover, problems)
+    println("|> POSITIONS AND COVERING")
+    main(positions_and_covering, problems)
+else
+    println("|> POSITIONS AND COVERING")
+    main(positions_and_covering, build_problems_basic())
+    println("|> HOUGH AND COVER")
+    main(hough_and_cover, build_problems_basic())
+end

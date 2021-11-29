@@ -1,6 +1,5 @@
 using JuMP
 import MathOptInterface
-import Cbc
 
 include("types.jl")
 include("positions_and_covering.jl")

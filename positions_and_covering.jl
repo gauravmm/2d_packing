@@ -5,6 +5,7 @@ re-use that primitive transform (and its inverse) in our Hough and Cover (H&C) a
 """
 
 using JuMP
+import Gurobi
 
 include("types.jl")
 
@@ -77,9 +78,8 @@ end
 
 This method solves very slowly due to a completely avoidable combinatorial explosion
 caused by computing the covering set for each object separately.
-(I imagine the original authors did it the right way in the paper.)
 """
-function covering_original(model::Model, parts::Vector{Rect}, houghmap)
+function covering(model::Model, parts::Vector{Rect}, houghmap)
     (np, bins, ht, wd) = size(houghmap)
     # Now we compute a covering of shape [np, bins, ht, wd], where
     # iff object k is at (i, j) in bin q, the value at (k, q, i:i+h-1, j:j+w-1) is 1
@@ -115,8 +115,10 @@ end
 """Implements the covering part of the P&C algorithm, modified to make it quicker.
 
 We alter the original by changing the way the covering is computed.
+
+NOTE: THIS CODE IS UNCHECKED!
 """
-function covering(model::Model, parts::Vector{Rect}, houghmap)
+function covering_tweak(model::Model, parts::Vector{Rect}, houghmap)
     (np, bins, ht, wd) = size(houghmap)
     # Now we compute a covering of shape [bins, ht, wd], where
     # iff object k is at (i, j) in bin q, the value at (q, i:i+h-1, j:j+w-1) is 1
@@ -165,7 +167,7 @@ Run P&C (or H&C) across a range of bins, increasing the bin size on each failure
 """
 function solver_incremental(prob::Problem; known_bins::Int = 0,
                     solver_func=positions_and_covering,
-                    optimizer=Cbc.Optimizer)
+                    optimizer=Gurobi.Optimizer)
     lb, ub = bin_bounds(prob)
     if known_bins > 0
         lb, ub = known_bins
