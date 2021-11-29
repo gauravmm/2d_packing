@@ -114,17 +114,20 @@ function check_solution(prob::Problem, soln::Solution)
         testarr[bin,i:(i+part.h-1),j:(j+part.w-1)] .+= 1
     end
 
-    if maximum(testarr) > 1
+    if length(soln.positions) != prob.num
+        println("|>     Missing solutions!")
+        return false
+    elseif maximum(testarr) > 1
         println("|>     Overlapping bins.")
         return false
+    else
+        return true
     end
-
-    return true
 end
 
 if true
     println("UNIBO")
-    problems = problems_from_unibo(do_first=5)
+    problems = problems_from_unibo(do_first=25)
     println("|> HOUGH AND COVER")
     main(hough_and_cover, problems)
     println("|> POSITIONS AND COVERING")
