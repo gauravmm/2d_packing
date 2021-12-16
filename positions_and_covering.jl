@@ -13,7 +13,7 @@ include("types.jl")
 """
 Constructs and constraints a starting position map.
 """
-function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer, wd::Integer; rotations::Bool=false)
+function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer, wd::Integer; rotations::Bool=false, strengthen::Bool=true)
     @assert !rotations # We don't support rotations yet
     np = length(parts)
 
@@ -29,6 +29,17 @@ function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer
         # The object cannot exist at these positions
         @constraint(model, houghmap[k,:,(maxy + 1):ht,:] .== 0)
         @constraint(model, houghmap[k,:,:,(maxx + 1):wd] .== 0)
+    end
+
+    # If strengthen is true, then we implement the "strengthening the convex polytope"
+    # tricks from P&C. Of the three presented tricks, the only one not already covered in
+    # our implementation is the constraint limiting the total area of all items in a bin
+    # to be no more than the total area of a bin.
+    if strengthen
+        for b in 1:bins
+            area_of_objects_in_bin = [sum(houghmap[k,b,:,:])*(parts[k].h*parts[k].w) for k in 1:np]
+            @constraint(model, sum(area_of_objects_in_bin) < ht*wd)
+        end
     end
 
     return houghmap
