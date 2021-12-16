@@ -60,7 +60,7 @@ function build_problems_unibo(fn; basepath = "data/unibo/")
     return problems
 end
 
-function main(solvers, problems; timeout_factor=10)
+function main(solvers, problems; timeout_factor=5, initial_timeout=1000)
     println("Burn-in test")
     for solver in solvers
         soln = solver_incremental(Problem(1, 1, 0, 0, 4, 4, [Rect(2, 2)]), solver_func=solver)
@@ -71,7 +71,7 @@ function main(solvers, problems; timeout_factor=10)
     for (i, prob) in enumerate(problems)
         best_time = Inf
         for solver in solvers
-            soln = solver_incremental(problems[i], solver_func=solver; timeout=best_time*timeout_factor)
+            soln = solver_incremental(problems[i], solver_func=solver; timeout= isfinite(best_time) ? best_time*timeout_factor : initial_timeout)
             if isnothing(soln)
                 println("\n|> $(String(Symbol(solver)))\t$(i)\tNO SOLUTION")
             else
@@ -85,7 +85,7 @@ function main(solvers, problems; timeout_factor=10)
     println("Done!")
 end
 
-function problems_from_unibo(;filenames::Vector{String}=["Class_02.2bp"], do_first=0)
+function problems_from_unibo(;filenames::Vector{String}=["Class_02.2bp"], do_first=0, skip_first=0)
     problems = Vector{}()
     for filename in filenames
         np = build_problems_unibo(filename)
@@ -99,6 +99,10 @@ function problems_from_unibo(;filenames::Vector{String}=["Class_02.2bp"], do_fir
     if do_first > 0 && do_first < length(problems)
         return problems[1:do_first]
     end
+    if skip_first > 0 && skip_first < length(problems)
+        return problems[skip_first:length(problems)]
+    end
+
     return problems
 end
 
@@ -135,7 +139,7 @@ if true
     timeout_factor=10
     println("|> UNIBO")
     println("|>     Set timeout_factor=$timeout_factor")
-    problems = problems_from_unibo()
+    problems = problems_from_unibo(; skip_first=11)
     main([hough_and_cover, positions_and_covering], problems)
 else
     println("|> TEST PROBLEMS")
