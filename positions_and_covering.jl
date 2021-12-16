@@ -112,36 +112,6 @@ function covering(model::Model, parts::Vector{Rect}, houghmap)
     return covering
 end
 
-"""Implements the covering part of the P&C algorithm, modified to make it quicker.
-
-We alter the original by changing the way the covering is computed.
-
-NOTE: THIS CODE IS UNCHECKED!
-"""
-function covering_tweak(model::Model, parts::Vector{Rect}, houghmap)
-    (np, bins, ht, wd) = size(houghmap)
-    # Now we compute a covering of shape [bins, ht, wd], where
-    # iff object k is at (i, j) in bin q, the value at (q, i:i+h-1, j:j+w-1) is 1
-    @variable(model, covering[1:bins, 1:ht, 1:wd] <= 1, integer=true, base_name="covermap")
-
-    for q in 1:bins
-        for i in 1:ht
-            for j in 1:wd
-                var = 0
-                for k in 1:np
-                    starti = max(1, i - parts[k].h + 1)
-                    startj = max(1, j - parts[k].w + 1)
-                    var += sum(houghmap[k,q,starti:i,startj:j])
-                end
-                @constraint(model, covering[q,i,j] == var)
-            end
-        end
-    end
-
-    return covering
-end
-
-
 """
 This implements Positions and Covering (P&C)
 """
