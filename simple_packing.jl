@@ -60,7 +60,7 @@ function build_problems_unibo(fn; basepath = "data/unibo/")
     return problems
 end
 
-function main(solvers, problems)
+function main(solvers, problems; timeout_factor=10)
     println("Burn-in test")
     for solver in solvers
         soln = solver_incremental(Problem(1, 1, 0, 0, 4, 4, [Rect(2, 2)]), solver_func=solver)
@@ -69,13 +69,15 @@ function main(solvers, problems)
     end
 
     for (i, prob) in enumerate(problems)
+        best_time = Inf
         for solver in solvers
-            soln = solver_incremental(problems[i], solver_func=solver)
+            soln = solver_incremental(problems[i], solver_func=solver; timeout=best_time*timeout_factor)
             if isnothing(soln)
                 println("\n|> $(String(Symbol(solver)))\t$(i)\tNO SOLUTION")
             else
                 verify = check_solution(prob, soln)
                 println("\n|> $(String(Symbol(solver)))\t$(i)\t$(verify)\t$(soln.bins)\t$(round(soln.total_time / 10^6)/1000) s")
+                best_time = min(best_time, soln.total_time*10^-9)
             end
         end
     end
@@ -129,8 +131,10 @@ function check_solution(prob::Problem, soln::Solution)
     end
 end
 
-if false
+if true
+    timeout_factor=10
     println("|> UNIBO")
+    println("|>     Set timeout_factor=$timeout_factor")
     problems = problems_from_unibo()
     main([hough_and_cover, positions_and_covering], problems)
 else

@@ -109,13 +109,17 @@ We use the Hough transform (equivalent to Positions step of P&C) and use a cumul
 """
 function hough_and_cover(model::Model, problem::Problem, bins::Int;
         rotations::Bool=false, verbose::Bool=true,
-        runsummode::RunningSumMode=Incremental())
+        runsummode::RunningSumMode=Incremental(), timeout::Float64=Inf)
     @assert !rotations # Don't support rotations for now.
 
     houghmap = positions(model, problem.parts, bins, problem.bin_h, problem.bin_w)
     deltamap = delta_transform(model, problem.parts, houghmap)
     runsum = runningsum(model, deltamap; mode=runsummode)
 
+    if isfinite(timeout)
+        println("Setting timeout $timeout")
+        MOI.set(model, MOI.TimeLimitSec(), timeout)
+    end
     # Now that we have created the problem, we solve it:
     optimize!(model)
     if termination_status(model) == OPTIMAL && primal_status(model) == FEASIBLE_POINT

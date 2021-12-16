@@ -127,7 +127,7 @@ end
 This implements Positions and Covering (P&C)
 """
 function positions_and_covering(model::Model, problem::Problem, bins::Int;
-        rotations::Bool=false)
+        rotations::Bool=false, timeout::Float64=Inf)
     @assert !rotations # Don't support rotations for now.
 
     # houghmap contains x^i_{jk} from the P&C paper
@@ -136,6 +136,10 @@ function positions_and_covering(model::Model, problem::Problem, bins::Int;
     covermap = covering(model, problem.parts, houghmap)
 
     # Now that we have created the problem, we solve it:
+    if isfinite(timeout)
+        println("Setting timeout $timeout")
+        MOI.set(model, MOI.TimeLimitSec(), timeout)
+    end
     optimize!(model)
     if termination_status(model) == OPTIMAL && primal_status(model) == FEASIBLE_POINT
         return positions⁻¹(value.(houghmap))
@@ -148,7 +152,8 @@ Run P&C (or H&C) across a range of bins, increasing the bin size on each failure
 """
 function solver_incremental(prob::Problem; known_bins::Int = 0,
                     solver_func=positions_and_covering,
-                    optimizer=Gurobi.Optimizer)
+                    optimizer=Gurobi.Optimizer,
+                    timeout=Inf)
     lb, ub = bin_bounds(prob)
     if known_bins > 0
         lb, ub = known_bins
@@ -158,8 +163,17 @@ function solver_incremental(prob::Problem; known_bins::Int = 0,
     bins = lb
     while bins <= ub
         last_time = time_ns()
+
+        time_spent = (last_time - start_time)*10^-9
+        if isfinite(timeout)
+            if time_spent >= timeout
+                println("|>     Timed out after $time_spent sec! At bin: $bins - 1")
+                return nothing
+            end
+        end
+
         model = Model(optimizer)
-        retval = solver_func(model, prob, bins)
+        retval = solver_func(model, prob, bins; timeout=timeout<=0 ? -1 : timeout - time_spent)
 
         if !isnothing(retval)
             # We have a solution!
