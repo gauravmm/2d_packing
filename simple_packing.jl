@@ -60,19 +60,23 @@ function build_problems_unibo(fn; basepath = "data/unibo/")
     return problems
 end
 
-function main(solver, problems)
+function main(solvers, problems)
     println("Burn-in test")
-    soln = solver_incremental(Problem(1, 1, 0, 0, 4, 4, [Rect(2, 2)]), solver_func=solver)
-    @assert !isnothing(soln)
-    println("Compilation time ~$(round(soln.total_time / 10^6)) ms")
+    for solver in solvers
+        soln = solver_incremental(Problem(1, 1, 0, 0, 4, 4, [Rect(2, 2)]), solver_func=solver)
+        @assert !isnothing(soln)
+        println("Compilation time $(String(Symbol(solver))): ~$(round(soln.total_time / 10^6)) ms")
+    end
 
     for (i, prob) in enumerate(problems)
-        soln = solver_incremental(problems[i], solver_func=solver)
-        if isnothing(soln)
-            println("\n|> $(i)\tNO SOLUTION")
-        else
-            verify = check_solution(prob, soln)
-            println("\n|> $(i)\t$(verify)\t$(soln.bins)\t$(round(soln.total_time / 10^6)/1000) s")
+        for solver in solvers
+            soln = solver_incremental(problems[i], solver_func=solver)
+            if isnothing(soln)
+                println("\n|> $(String(Symbol(solver)))\t$(i)\tNO SOLUTION")
+            else
+                verify = check_solution(prob, soln)
+                println("\n|> $(String(Symbol(solver)))\t$(i)\t$(verify)\t$(soln.bins)\t$(round(soln.total_time / 10^6)/1000) s")
+            end
         end
     end
 
@@ -125,16 +129,11 @@ function check_solution(prob::Problem, soln::Solution)
     end
 end
 
-if true
-    println("UNIBO")
-    problems = problems_from_unibo(do_first=25)
-    println("|> HOUGH AND COVER")
-    main(hough_and_cover, problems)
-    println("|> POSITIONS AND COVERING")
-    main(positions_and_covering, problems)
+if false
+    println("|> UNIBO")
+    problems = problems_from_unibo()
+    main([hough_and_cover, positions_and_covering], problems)
 else
-    println("|> POSITIONS AND COVERING")
-    main(positions_and_covering, build_problems_basic())
-    println("|> HOUGH AND COVER")
-    main(hough_and_cover, build_problems_basic())
+    println("|> TEST PROBLEMS")
+    main([hough_and_cover, positions_and_covering], build_problems_basic())
 end

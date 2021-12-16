@@ -38,7 +38,7 @@ function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer
     if strengthen
         for b in 1:bins
             area_of_objects_in_bin = [sum(houghmap[k,b,:,:])*(parts[k].h*parts[k].w) for k in 1:np]
-            @constraint(model, sum(area_of_objects_in_bin) < ht*wd)
+            @constraint(model, sum(area_of_objects_in_bin) <= ht*wd)
         end
     end
 
