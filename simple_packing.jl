@@ -85,22 +85,24 @@ function main(solvers, problems; timeout_factor=5, initial_timeout=1000)
     println("Done!")
 end
 
-function problems_from_unibo(;filenames::Vector{String}=["Class_02.2bp"], do_first=0, skip_first=0)
+function problems_from_unibo(;filenames::Vector{String}=[], do_first=0, skip_first=0)
     problems = Vector{}()
     for filename in filenames
         np = build_problems_unibo(filename)
+
         if isnothing(np)
             println("Error loading from $filename")
         else
+            if do_first > 0 && do_first < length(np)
+                np = np[1:do_first]
+            end
+            if skip_first > 0 && skip_first < length(np)
+                np = np[skip_first+1:length(np)]
+            end
+
             append!(problems, np)
             println("Loaded $(length(np)) problems from $filename")
         end
-    end
-    if do_first > 0 && do_first < length(problems)
-        return problems[1:do_first]
-    end
-    if skip_first > 0 && skip_first < length(problems)
-        return problems[skip_first+1:length(problems)]
     end
 
     return problems
@@ -137,9 +139,12 @@ end
 
 if true
     timeout_factor=10
+    # Leaving out Class_02:
+    files = ["Class_01.2bp", "Class_03.2bp", "Class_04.2bp", "Class_05.2bp", "Class_06.2bp", "Class_07.2bp", "Class_08.2bp", "Class_09.2bp", "Class_10.2bp"]
+
     println("|> UNIBO")
     println("|>     Set timeout_factor=$timeout_factor")
-    problems = problems_from_unibo(; skip_first=11)
+    problems = problems_from_unibo(;filenames=files, do_first=10)
     main([hough_and_cover, positions_and_covering], problems)
 else
     println("|> TEST PROBLEMS")
