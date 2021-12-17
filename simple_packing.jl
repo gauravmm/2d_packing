@@ -73,10 +73,10 @@ function main(solvers, problems; timeout_factor=5, initial_timeout=1000)
         for solver in solvers
             soln = solver_incremental(problems[i], solver_func=solver; timeout= isfinite(best_time) ? best_time*timeout_factor : initial_timeout)
             if isnothing(soln)
-                println("\n|> $(String(Symbol(solver)))\t$(i)\tNO SOLUTION")
+                println("\n|> $(String(Symbol(solver)))\t$(problems[i].num)\tNO SOLUTION")
             else
                 verify = check_solution(prob, soln)
-                println("\n|> $(String(Symbol(solver)))\t$(i)\t$(verify)\t$(soln.bins)\t$(round(soln.total_time / 10^6)/1000) s")
+                println("\n|> $(String(Symbol(solver)))\t$(problems[i].num)\t$(verify)\t$(soln.bins)\t$(round(soln.total_time / 10^6)/1000) s")
                 best_time = min(best_time, soln.total_time*10^-9)
             end
         end
@@ -100,7 +100,7 @@ function problems_from_unibo(;filenames::Vector{String}=["Class_02.2bp"], do_fir
         return problems[1:do_first]
     end
     if skip_first > 0 && skip_first < length(problems)
-        return problems[skip_first:length(problems)]
+        return problems[skip_first+1:length(problems)]
     end
 
     return problems
