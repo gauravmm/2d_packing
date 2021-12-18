@@ -7,6 +7,7 @@ struct Rect
 end
 
 struct Problem
+    seq::Int32
     problem_class::Int32
     num::Int32
     rel_inst::Int32

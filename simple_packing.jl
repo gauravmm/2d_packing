@@ -21,20 +21,21 @@ end
 
 function build_problems_basic()
     return [
-        Problem(1, 1, 0, 0, 4, 4, [Rect(2, 2)])
-        Problem(1, 1, 0, 0, 4, 4, [Rect(3, 3)])
-        Problem(1, 1, 0, 0, 4, 4, [Rect(4, 4)])
-        Problem(1, 2, 0, 0, 4, 4, [Rect(2, 2), Rect(2, 2)])
-        Problem(1, 2, 0, 0, 4, 4, [Rect(3, 1), Rect(2, 2)])
-        Problem(1, 2, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 2)])
-        Problem(1, 2, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 3)])
-        Problem(1, 2, 0, 0, 4, 4, [Rect(3, 3), Rect(2, 3)])
+        Problem(1, 1, 1, 0, 0, 4, 4, [Rect(2, 2)])
+        Problem(2, 1, 1, 0, 0, 4, 4, [Rect(3, 3)])
+        Problem(3, 1, 1, 0, 0, 4, 4, [Rect(4, 4)])
+        Problem(4, 1, 2, 0, 0, 4, 4, [Rect(2, 2), Rect(2, 2)])
+        Problem(5, 1, 2, 0, 0, 4, 4, [Rect(3, 1), Rect(2, 2)])
+        Problem(6, 1, 2, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 2)])
+        Problem(7, 1, 2, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 3)])
+        Problem(8, 1, 2, 0, 0, 4, 4, [Rect(3, 3), Rect(2, 3)])
     ]
 end
 
 function build_problems_unibo(fn; basepath = "data/unibo/")
     # Build a problem from the UNIBO files
     pat = normpath(joinpath(basepath, fn))
+    seq = 1
 
     problems = Vector{Problem}()
     open(pat) do f
@@ -49,7 +50,8 @@ function build_problems_unibo(fn; basepath = "data/unibo/")
                 h, w = popline(f)
                 push!(objs, Rect(w, h))
             end
-            push!(problems, Problem(problem_class, num, rel_ins, abs_ins, wbin, hbin, objs))
+            push!(problems, Problem(seq, problem_class, num, rel_ins, abs_ins, wbin, hbin, objs))
+            seq+=1
 
             if !eof(f)
                 popline(f)
@@ -63,20 +65,21 @@ end
 function main(solvers, problems; timeout_factor=5, initial_timeout=1000)
     println("Burn-in test")
     for solver in solvers
-        soln = solver_incremental(Problem(1, 1, 0, 0, 4, 4, [Rect(2, 2)]), solver_func=solver)
+        soln = solver_incremental(Problem(-1, 1, 1, 0, 0, 4, 4, [Rect(2, 2)]), solver_func=solver)
         @assert !isnothing(soln)
         println("Compilation time $(String(Symbol(solver))): ~$(round(soln.total_time / 10^6)) ms")
     end
 
+    println("|>     Set timeout_factor=$timeout_factor")
     for (i, prob) in enumerate(problems)
         best_time = Inf
         for solver in solvers
             soln = solver_incremental(problems[i], solver_func=solver; timeout= isfinite(best_time) ? best_time*timeout_factor : initial_timeout)
             if isnothing(soln)
-                println("\n|> $(String(Symbol(solver)))\t$(problems[i].num)\tNO SOLUTION")
+                println("\n|> $(String(Symbol(solver)))\t$(problems[i].seq)\t$(problems[i].problem_class)\tNO SOLUTION")
             else
                 verify = check_solution(prob, soln)
-                println("\n|> $(String(Symbol(solver)))\t$(problems[i].num)\t$(verify)\t$(soln.bins)\t$(round(soln.total_time / 10^6)/1000) s")
+                println("\n|> $(String(Symbol(solver)))\t$(problems[i].seq)\t$(problems[i].problem_class)\t$(verify)\t$(soln.bins)\t$(round(soln.total_time / 10^6)/1000) s")
                 best_time = min(best_time, soln.total_time*10^-9)
             end
         end
@@ -138,12 +141,10 @@ function check_solution(prob::Problem, soln::Solution)
 end
 
 if true
-    timeout_factor=10
     # Leaving out Class_02:
     files = ["Class_01.2bp", "Class_03.2bp", "Class_04.2bp", "Class_05.2bp", "Class_06.2bp", "Class_07.2bp", "Class_08.2bp", "Class_09.2bp", "Class_10.2bp"]
 
     println("|> UNIBO")
-    println("|>     Set timeout_factor=$timeout_factor")
     problems = problems_from_unibo(;filenames=files, do_first=10)
     main([hough_and_cover, positions_and_covering], problems)
 else
