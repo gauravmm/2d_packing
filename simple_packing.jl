@@ -142,10 +142,11 @@ end
 
 if true
     # Leaving out Class_02:
-    files = ["Class_01.2bp", "Class_03.2bp", "Class_04.2bp", "Class_05.2bp", "Class_06.2bp", "Class_07.2bp", "Class_08.2bp", "Class_09.2bp", "Class_10.2bp"]
+    files = ["Class_03.2bp", "Class_04.2bp", "Class_05.2bp", "Class_06.2bp", "Class_07.2bp", "Class_08.2bp", "Class_09.2bp", "Class_10.2bp"]
 
     println("|> UNIBO")
     problems = problems_from_unibo(;filenames=files, do_first=10)
+    problems[2:length(problems)]
     main([hough_and_cover, positions_and_covering], problems)
 else
     println("|> TEST PROBLEMS")
