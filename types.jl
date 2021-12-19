@@ -15,6 +15,7 @@ struct Problem
     bin_w::Int32
     bin_h::Int32
     parts::Vector{Rect}
+    rotations::Bool
 end
 
 struct Solution

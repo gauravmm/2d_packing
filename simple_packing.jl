@@ -2,7 +2,7 @@ import Pkg
 Pkg.activate(".")
 
 using JuMP
-import GLPK
+using ArgParse
 import Test
 
 include("hough_and_cover.jl")
@@ -21,18 +21,18 @@ end
 
 function build_problems_basic()
     return [
-        Problem(1, 1, 1, 0, 0, 4, 4, [Rect(2, 2)])
-        Problem(2, 1, 1, 0, 0, 4, 4, [Rect(3, 3)])
-        Problem(3, 1, 1, 0, 0, 4, 4, [Rect(4, 4)])
-        Problem(4, 1, 2, 0, 0, 4, 4, [Rect(2, 2), Rect(2, 2)])
-        Problem(5, 1, 2, 0, 0, 4, 4, [Rect(3, 1), Rect(2, 2)])
-        Problem(6, 1, 2, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 2)])
-        Problem(7, 1, 2, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 3)])
-        Problem(8, 1, 2, 0, 0, 4, 4, [Rect(3, 3), Rect(2, 3)])
+        Problem(1, 1, 1, 0, 0, 4, 4, [Rect(2, 2)], false)
+        Problem(2, 1, 1, 0, 0, 4, 4, [Rect(3, 3)], false)
+        Problem(3, 1, 1, 0, 0, 4, 4, [Rect(4, 4)], false)
+        Problem(4, 1, 2, 0, 0, 4, 4, [Rect(2, 2), Rect(2, 2)], false)
+        Problem(5, 1, 2, 0, 0, 4, 4, [Rect(3, 1), Rect(2, 2)], false)
+        Problem(6, 1, 2, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 2)], false)
+        Problem(7, 1, 2, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 3)], false)
+        Problem(8, 1, 2, 0, 0, 4, 4, [Rect(3, 3), Rect(2, 3)], false)
     ]
 end
 
-function build_problems_unibo(fn; basepath = "data/unibo/")
+function build_problems_unibo(fn; basepath="./")
     # Build a problem from the UNIBO files
     pat = normpath(joinpath(basepath, fn))
     seq = 1
@@ -50,7 +50,7 @@ function build_problems_unibo(fn; basepath = "data/unibo/")
                 h, w = popline(f)
                 push!(objs, Rect(w, h))
             end
-            push!(problems, Problem(seq, problem_class, num, rel_ins, abs_ins, wbin, hbin, objs))
+            push!(problems, Problem(seq, problem_class, num, rel_ins, abs_ins, wbin, hbin, objs, false))
             seq+=1
 
             if !eof(f)
@@ -65,7 +65,7 @@ end
 function main(solvers, problems; timeout_factor=5, initial_timeout=1000)
     println("Burn-in test")
     for solver in solvers
-        soln = solver_incremental(Problem(-1, 1, 1, 0, 0, 4, 4, [Rect(2, 2)]), solver_func=solver)
+        soln = solver_incremental(Problem(-1, 1, 1, 0, 0, 4, 4, [Rect(2, 2)], false), solver_func=solver)
         @assert !isnothing(soln)
         println("Compilation time $(String(Symbol(solver))): ~$(round(soln.total_time / 10^6)) ms")
     end
@@ -140,14 +140,30 @@ function check_solution(prob::Problem, soln::Solution)
     end
 end
 
-if true
-    # Leaving out Class_02:
-    files = ["Class_03.2bp", "Class_04.2bp", "Class_05.2bp", "Class_06.2bp", "Class_07.2bp", "Class_08.2bp", "Class_09.2bp", "Class_10.2bp"]
+settings = ArgParseSettings()
+@add_arg_table settings begin
+    "filename"
+        help="2bp file to load"
+        required=true
+        action=:store_arg
+    "number"
+        help="which question(s) to evaluate in the file"
+        nargs='*'
+        action = :store_arg
+end
 
-    println("|> UNIBO")
-    problems = problems_from_unibo(;filenames=files, do_first=10)
-    problems[2:length(problems)]
-    main([hough_and_cover, positions_and_covering], problems)
+if true
+    parsed_args = parse_args(ARGS, settings)
+    problems = problems_from_unibo(;filenames=[parsed_args["filename"]])
+    idxes = parsed_args["number"]
+    if length(idxes) == 0
+        println("No number specified, running all")
+        idxes = collect(1:length(problems))
+    end
+
+    println("Requested problems $idxes")
+    main([hough_and_cover, positions_and_covering], problems[idxes])
+
 else
     println("|> TEST PROBLEMS")
     main([hough_and_cover, positions_and_covering], build_problems_basic())
