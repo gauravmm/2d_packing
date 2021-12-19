@@ -149,6 +149,7 @@ settings = ArgParseSettings()
     "number"
         help="which question(s) to evaluate in the file"
         nargs='*'
+        arg_type=Int
         action = :store_arg
 end
 
