@@ -39,7 +39,7 @@ function check_solution(prob::Problem, soln::Solution)
         return false
     end
     bins = soln.bins
-    testarr = zeros(Int32, bins, prob.bin_h, prob.bin_w)
+    testarr = zeros(Int32, (bins, prob.bin_h, prob.bin_w))
     ht = prob.bin_h
     wd = prob.bin_w
 
@@ -52,7 +52,7 @@ function check_solution(prob::Problem, soln::Solution)
         testarr[bin,i:(i+part.h-1),j:(j+part.w-1)] .+= 1
     end
 
-    if length(soln.positions) != prob.num
+    if length(soln.positions) != length(prob.parts)
         println("|>     Missing solutions!")
         return false
     elseif maximum(testarr) > 1

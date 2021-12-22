@@ -13,29 +13,23 @@ include("types.jl")
 """
 Constructs and constraints a starting position map.
 """
-function positions_constraints(model, houghmap, k, ht, wd, part_h, part_w)
-    # Maximum positions at which the top-left of the object can be placed:
-    maxy = (ht - part_h + 1)
-    maxx = (wd - part_w + 1)
-    # The object cannot exist at these positions
-    @constraint(model, houghmap[k,:,(maxy + 1):ht,:] .== 0)
-    @constraint(model, houghmap[k,:,:,(maxx + 1):wd] .== 0)
-
-    # Instead of using this constraint:
-    # @constraint(model, sum(houghmap[k,:,1:maxy,1:maxx]) == 1)
-    # We compute the number of positions the object exists at:
-    return sum(houghmap[k,:,1:maxy,1:maxx])
-end
-
-function positions_impl(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer, wd::Integer;strengthen::Bool=true)
+function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer, wd::Integer;strengthen::Bool=true)
     np = length(parts)
 
     # Generate the positions map
     @variable(model, houghmap[1:np, 1:bins, 1:ht, 1:wd], binary=true, base_name="houghmap")
+    @variable(model, supply[1:np], binary=true, base_name="houghmap")
 
     for k in 1:np
-        num_occur = positions_constraints(model, houghmap, k, ht, wd, parts[k].h, parts[k].w)
-        @constraint(model, num_occur == 1)
+        # Maximum positions at which the top-left of the object can be placed:
+        maxy = (ht - parts[k].h + 1)
+        maxx = (wd - parts[k].w + 1)
+        # The object cannot exist at these positions
+        @constraint(model, houghmap[k,:,(maxy + 1):ht,:] .== 0)
+        @constraint(model, houghmap[k,:,:,(maxx + 1):wd] .== 0)
+
+        # We compute the supply of each object:
+        @constraint(model, supply[k] == sum(houghmap[k,:,1:maxy,1:maxx]))
     end
 
     # If strengthen is true, then we implement the "strengthening the convex polytope"
@@ -49,81 +43,30 @@ function positions_impl(model::Model, parts::Vector{Rect}, bins::Integer, ht::In
         end
     end
 
-    return houghmap
-end
-
-function positions_impl_rot(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer, wd::Integer; strengthen::Bool=true)
-    np = length(parts)
-
-    # Generate the positions map
-    @variable(model, houghmap[1:(rotations ? 2*np : np), 1:bins, 1:ht, 1:wd], binary=true, base_name="houghmap")
-
-    for k in 1:np
-        num_occur_orient = positions_constraints(model, houghmap, 2*k, ht, wd, parts[k].h, parts[k].w)
-        num_occur_rotate = positions_constraints(model, houghmap, 2*k+1, ht, wd, parts[k].w, parts[k].h)
-        @constraint(model, (num_occur_orient + num_occur_rotate) == 1)
-    end
-
-    # If strengthen is true, then we implement the "strengthening the convex polytope"
-    # tricks from P&C.
-    if strengthen
-        for b in 1:bins
-            area_of_objects_in_bin = [sum(houghmap[((2*k):(2*k+1)),b,:,:])*(parts[k].h*parts[k].w) for k in 1:np]
-            @constraint(model, sum(area_of_objects_in_bin) <= ht*wd)
-        end
-    end
-
-    return houghmap
-end
-
-function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer, wd::Integer; rotations::Bool=false, strengthen::Bool=true)
-    if rotations
-        return positions_impl_rot(model, parts, bins, ht, wd; strengthen=strengthen)
-    else
-        return positions_impl(model, parts, bins, ht, wd; strengthen=strengthen)
-    end
+    return houghmap, supply
 end
 
 """
 Given a solved position map, recover the indices of each object.
 """
 
-function positions⁻¹_helper(valmap::Array{Float64,4})
+function positions⁻¹(valmap::Array{Float64,4})
     np, _, _, _ = size(valmap)
     # Extract the result:
-    coords = Vector{CartesianIndex{3}}(undef, np)
+    coords = Vector{Union{CartesianIndex{3}, Nothing}}(undef, np)
 
     # TODO: Write this using a single call to findall and sorting by first coordinate.
     for k in 1:np
         idxes = findall(x -> x >= .999, valmap[k,:,:,:])
-        @assert length(idxes) == 1
-        coords[k] = first(idxes)
+        if length(idxes) > 0
+            coords[k] = first(idxes)
+        else
+            coords[k] = nothing
+        end
+
     end
 
     return coords
-end
-
-function positions⁻¹_helper_rot(valmap::Array{Float64,4})
-    np, _, _, _ = size(valmap)
-    # Extract the result:
-    @assert !rotations
-    coords = Vector{CartesianIndex{4}}(undef, np)
-
-    for k in 1:np
-        idxes = findall(x -> x >= .999, valmap[((2*k):(2*k+1)),:,:,:])
-        @assert length(idxes) == 1
-        coords[k] = first(idxes)
-    end
-
-    return coords
-end
-
-function positions⁻¹(valmap::Array{Float64,4}; rotations::Bool=false)
-    if rotations
-        return positions⁻¹_helper_rot(valmap)
-    else
-        return positions⁻¹_helper(valmap)
-    end
 end
 
 
@@ -153,9 +96,7 @@ end
 This method solves very slowly due to a completely avoidable combinatorial explosion
 caused by computing the covering set for each object separately.
 """
-function covering(model::Model, parts::Vector{Rect}, houghmap; rotations::Bool=false)
-    @assert rotations == false
-
+function covering(model::Model, parts::Vector{Rect}, houghmap)
     (np, bins, ht, wd) = size(houghmap)
     # Now we compute a covering of shape [np, bins, ht, wd], where
     # iff object k is at (i, j) in bin q, the value at (k, q, i:i+h-1, j:j+w-1) is 1
@@ -196,7 +137,10 @@ function positions_and_covering(model::Model, problem::Problem, bins::Int;
     @assert !rotations # Don't support rotations for now.
 
     # houghmap contains x^i_{jk} from the P&C paper
-    houghmap = positions(model, problem.parts, bins, problem.bin_h, problem.bin_w)
+    houghmap, supply = positions(model, problem.parts, bins, problem.bin_h, problem.bin_w)
+    # supply[k] is the number of times object k appears:
+    @constraint(model, supply .== 1)
+
     # covermap contains C, the correspondence matrix
     covermap = covering(model, problem.parts, houghmap)
 
@@ -207,7 +151,7 @@ function positions_and_covering(model::Model, problem::Problem, bins::Int;
     end
     optimize!(model)
     if termination_status(model) == OPTIMAL && primal_status(model) == FEASIBLE_POINT
-        return positions⁻¹(value.(houghmap))
+        return positions⁻¹(value.(houghmap)), nothing
     end
     return nothing
 end
@@ -243,7 +187,8 @@ function solver_incremental(prob::Problem; known_bins::Int = 0,
         if !isnothing(retval)
             # We have a solution!
             end_time = time_ns()
-            return Solution(true, bins, retval, end_time - start_time, end_time - last_time)
+            positions, rotations = retval
+            return Solution(true, bins, positions, rotations, end_time - start_time, end_time - last_time)
         end
         bins += 1
     end

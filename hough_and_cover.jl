@@ -125,12 +125,24 @@ This implements Hough and Cover (H&C), which is a derivative of Positions and Co
 We use the Hough transform (equivalent to Positions step of P&C) and use a cumulative-sum map to ensure no collisions exist. The use of a running-sum map (and appropriate pre-transformation) allows us to greatly reduce the number of conditions.
 """
 function hough_and_cover(model::Model, problem::Problem, bins::Int;
-        rotations::Bool=false, verbose::Bool=true,
         runsummode::RunningSumMode=Incremental(), timeout::Float64=Inf)
-    @assert !rotations # Don't support rotations for now.
 
-    houghmap = positions(model, problem.parts, bins, problem.bin_h, problem.bin_w)
-    deltamap = delta_transform(model, problem.parts, houghmap)
+    parts = problem.parts
+    if problem.rotations
+        # Expand parts to include rotations:
+        parts = [parts; [Rect(p.h, p.w) for p in parts]]
+    end
+
+    houghmap, supply = positions(model, parts, bins, problem.bin_h, problem.bin_w)
+    if problem.rotations
+        np = length(problem.parts)
+        # We want exactly one of the oriented object and its rotation:
+        @constraint(model, supply[1:np] .+ supply[np+1:2*np] .== 1)
+    else
+        @constraint(model, supply .== 1)
+    end
+
+    deltamap = delta_transform(model, parts, houghmap)
     runsum = runningsum(model, deltamap; mode=runsummode)
 
     if isfinite(timeout)
@@ -140,7 +152,30 @@ function hough_and_cover(model::Model, problem::Problem, bins::Int;
     # Now that we have created the problem, we solve it:
     optimize!(model)
     if termination_status(model) == OPTIMAL && primal_status(model) == FEASIBLE_POINT
-        return positions⁻¹(value.(houghmap))
+        valmap = positions⁻¹(value.(houghmap))
+        if problem.rotations
+            return gather_rotations(problem, valmap)
+        else
+            return valmap, nothing
+        end
     end
     return nothing
+end
+
+function gather_rotations(problem::Problem, valmap)
+    np = length(problem.parts)
+    vm = Vector{CartesianIndex{3}}(undef, np)
+    rot= zeros(Int, (np,))
+
+    for k in 1:np
+        if !isnothing(valmap[k])
+            vm[k] = valmap[k]
+            rot[k] = false
+        else
+            vm[k] = valmap[k + np]
+            rot[k] = true
+        end
+    end
+
+    return vm, rot
 end
