@@ -13,22 +13,29 @@ include("types.jl")
 """
 Constructs and constraints a starting position map.
 """
+function positions_constraints(model, houghmap, k, ht, wd, part_h, part_w)
+    # Maximum positions at which the top-left of the object can be placed:
+    maxy = (ht - part_h + 1)
+    maxx = (wd - part_w + 1)
+    # The object cannot exist at these positions
+    @constraint(model, houghmap[k,:,(maxy + 1):ht,:] .== 0)
+    @constraint(model, houghmap[k,:,:,(maxx + 1):wd] .== 0)
+
+    # Instead of using this constraint:
+    # @constraint(model, sum(houghmap[k,:,1:maxy,1:maxx]) == 1)
+    # We compute the number of positions the object exists at:
+    return sum(houghmap[k,:,1:maxy,1:maxx])
+end
+
 function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer, wd::Integer; rotations::Bool=false, strengthen::Bool=true)
-    @assert !rotations # We don't support rotations yet
     np = length(parts)
 
     # Generate the positions map
     @variable(model, houghmap[1:np, 1:bins, 1:ht, 1:wd], binary=true, base_name="houghmap")
 
     for k in 1:np
-        # Maximum positions at which the top-left of the object can be placed:
-        maxy = (ht - parts[k].h + 1)
-        maxx = (wd - parts[k].w + 1)
-        # The object exists at exactly one position:
-        @constraint(model, sum(houghmap[k,:,1:maxy,1:maxx]) == 1)
-        # The object cannot exist at these positions
-        @constraint(model, houghmap[k,:,(maxy + 1):ht,:] .== 0)
-        @constraint(model, houghmap[k,:,:,(maxx + 1):wd] .== 0)
+        num_occur = positions_constraints(model, houghmap, k, ht, wd, parts[k].h, parts[k].w)
+        @constraint(model, num_occur == 1)
     end
 
     # If strengthen is true, then we implement the "strengthening the convex polytope"
@@ -38,6 +45,30 @@ function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer
     if strengthen
         for b in 1:bins
             area_of_objects_in_bin = [sum(houghmap[k,b,:,:])*(parts[k].h*parts[k].w) for k in 1:np]
+            @constraint(model, sum(area_of_objects_in_bin) <= ht*wd)
+        end
+    end
+
+    return houghmap
+end
+
+function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer, wd::Integer; rotations::Bool=true, strengthen::Bool=true)
+    np = length(parts)
+
+    # Generate the positions map
+    @variable(model, houghmap[1:(rotations ? 2*np : np), 1:bins, 1:ht, 1:wd], binary=true, base_name="houghmap")
+
+    for k in 1:np
+        num_occur_orient = positions_constraints(model, houghmap, 2*k, ht, wd, parts[k].h, parts[k].w)
+        num_occur_rotate = positions_constraints(model, houghmap, 2*k+1, ht, wd, parts[k].w, parts[k].h)
+        @constraint(model, (num_occur_orient + num_occur_rotate) == 1)
+    end
+
+    # If strengthen is true, then we implement the "strengthening the convex polytope"
+    # tricks from P&C.
+    if strengthen
+        for b in 1:bins
+            area_of_objects_in_bin = [sum(houghmap[((2*k):(2*k+1)),b,:,:])*(parts[k].h*parts[k].w) for k in 1:np]
             @constraint(model, sum(area_of_objects_in_bin) <= ht*wd)
         end
     end
@@ -57,6 +88,21 @@ function positions⁻¹(valmap::Array{Float64,4}; rotations::Bool=false)
     # TODO: Write this using a single call to findall and sorting by first coordinate.
     for k in 1:np
         idxes = findall(x -> x >= .999, valmap[k,:,:,:])
+        @assert length(idxes) == 1
+        coords[k] = first(idxes)
+    end
+
+    return coords
+end
+
+function positions⁻¹(valmap::Array{Float64,4}; rotations::Bool=true)
+    np, _, _, _ = size(valmap)
+    # Extract the result:
+    @assert !rotations
+    coords = Vector{CartesianIndex{4}}(undef, np)
+
+    for k in 1:np
+        idxes = findall(x -> x >= .999, valmap[((2*k):(2*k+1)),:,:,:])
         @assert length(idxes) == 1
         coords[k] = first(idxes)
     end
@@ -90,7 +136,9 @@ end
 This method solves very slowly due to a completely avoidable combinatorial explosion
 caused by computing the covering set for each object separately.
 """
-function covering(model::Model, parts::Vector{Rect}, houghmap)
+function covering(model::Model, parts::Vector{Rect}, houghmap; rotations::Bool=false)
+    @assert rotations == false
+
     (np, bins, ht, wd) = size(houghmap)
     # Now we compute a covering of shape [np, bins, ht, wd], where
     # iff object k is at (i, j) in bin q, the value at (k, q, i:i+h-1, j:j+w-1) is 1

@@ -29,6 +29,8 @@ function build_problems_basic()
         Problem(6, 1, 2, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 2)], false)
         Problem(7, 1, 2, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 3)], false)
         Problem(8, 1, 2, 0, 0, 4, 4, [Rect(3, 3), Rect(2, 3)], false)
+        Problem(8, 1, 2, 0, 0, 3, 3, repeat(Rect(1, 1), 9), false)
+        Problem(8, 1, 2, 0, 0, 3, 3, [Rect(3, 1), Rect(1, 3)], true)
     ]
 end
 
@@ -142,6 +144,18 @@ end
 
 settings = ArgParseSettings()
 @add_arg_table settings begin
+    "basic"
+        help="basic tests"
+        action=:command
+    "unibo"
+        help="run examples from the UNIBO dataset"
+        action=:command
+    "nqsq"
+        help="not quite squares (with rotations!)"
+        action=:command
+end
+
+@add_arg_table settings["unibo"] begin
     "filename"
         help="2bp file to load"
         required=true
@@ -153,8 +167,26 @@ settings = ArgParseSettings()
         action = :store_arg
 end
 
-if true
-    parsed_args = parse_args(ARGS, settings)
+@add_arg_table settings["nqsq"] begin
+    "binsize"
+        help="the size of the bin, as (binsize-1, binsize)"
+        arg_type=Int
+        required=true
+        action=:store_arg
+    "maxn"
+        help="the largest not quite square, as (maxn-1, maxn)"
+        arg_type=Int
+        required=true
+        action = :store_arg
+end
+
+
+parsed_args = parse_args(ARGS, settings)
+if parsed_args["%COMMAND%"] == "basic"
+    println("|> TEST PROBLEMS")
+    main([hough_and_cover, positions_and_covering], build_problems_basic())
+
+elseif parsed_args["%COMMAND%"] == "unibo"
     problems = problems_from_unibo(;filenames=[parsed_args["filename"]])
     idxes = parsed_args["number"]
     if length(idxes) == 0
@@ -165,7 +197,11 @@ if true
     println("Requested problems $idxes")
     main([hough_and_cover, positions_and_covering], problems[idxes])
 
-else
-    println("|> TEST PROBLEMS")
-    main([hough_and_cover, positions_and_covering], build_problems_basic())
+elseif parsed_args["%COMMAND%"] == "nqsq"
+    binsize = parsed_args["binsize"]
+    binsize = parsed_args["maxn"]
+    problems = problems_from_unibo(;filenames=[parsed_args["filename"]])
+
+    main([hough_and_cover, positions_and_covering], problems[idxes])
+
 end
