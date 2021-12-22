@@ -43,13 +43,23 @@ function check_solution(prob::Problem, soln::Solution)
     ht = prob.bin_h
     wd = prob.bin_w
 
-    for (part::Rect, pos::CartesianIndex{3}) in zip(prob.parts, soln.positions)
+    rotations = zeros(Bool, length(prob.parts))
+    if prob.rotations
+        rotations = soln.rotations
+    else
+        @assert isnothing(soln.rotations)
+    end
+
+    for (part::Rect, pos::CartesianIndex{3}, rot) in zip(prob.parts, soln.positions, rotations)
         bin, i, j = Tuple(pos)
-        if bin <= 0 || bin > bins || i <= 0 || i + part.h - 1 > ht || j <= 0 || j + part.w - 1 > wd
+        part_h = rot ? part.w : part.h
+        part_w = rot ? part.h : part.w
+
+        if bin <= 0 || bin > bins || i <= 0 || i + part_h - 1 > ht || j <= 0 || j + part_w - 1 > wd
             println("|>     Coordinate out of bounds $bin, $i, $j")
         end
 
-        testarr[bin,i:(i+part.h-1),j:(j+part.w-1)] .+= 1
+        testarr[bin,i:(i+part_h-1),j:(j+part_w-1)] .+= 1
     end
 
     if length(soln.positions) != length(prob.parts)

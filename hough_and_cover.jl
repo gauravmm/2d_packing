@@ -165,7 +165,7 @@ end
 function gather_rotations(problem::Problem, valmap)
     np = length(problem.parts)
     vm = Vector{CartesianIndex{3}}(undef, np)
-    rot= zeros(Int, (np,))
+    rot= zeros(Bool, (np,))
 
     for k in 1:np
         if !isnothing(valmap[k])
