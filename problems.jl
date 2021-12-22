@@ -13,8 +13,15 @@ function build_problems_basic()
         Problem(6, 1, 2, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 2)], false)
         Problem(7, 1, 2, 0, 0, 4, 4, [Rect(2, 3), Rect(2, 3)], false)
         Problem(8, 1, 2, 0, 0, 4, 4, [Rect(3, 3), Rect(2, 3)], false)
-        Problem(8, 1, 2, 0, 0, 3, 3, repeat(Rect(1, 1), 9), false)
+        Problem(8, 1, 2, 0, 0, 3, 3, [Rect(1, 1) for _ in 1:9], false)
+    ]
+end
+
+function build_problems_basicrot()
+    return [
         Problem(8, 1, 2, 0, 0, 3, 3, [Rect(3, 1), Rect(1, 3)], true)
+        Problem(8, 1, 2, 0, 0, 3, 3, [Rect(3, 2), Rect(1, 3)], true)
+        Problem(8, 1, 2, 0, 0, 3, 3, [Rect(1, 3), Rect(1, 3), Rect(3, 1)], true)
     ]
 end
 
@@ -22,6 +29,18 @@ end
 #
 # UNIBO reference problems
 #
+function popline(f::IOStream)
+    line = readline(f)
+    if isempty(strip(line))
+        return
+    end
+
+    left = strip(line[1:5])
+    right = strip(line[6:10])
+
+    return [parse(Int32, left) (isempty(right) ? -1 : parse(Int32, right))]
+end
+
 function unibo_parse(fn; basepath="./")
     # Build a problem from the UNIBO files
     pat = normpath(joinpath(basepath, fn))

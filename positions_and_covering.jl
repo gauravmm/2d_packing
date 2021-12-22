@@ -27,7 +27,7 @@ function positions_constraints(model, houghmap, k, ht, wd, part_h, part_w)
     return sum(houghmap[k,:,1:maxy,1:maxx])
 end
 
-function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer, wd::Integer; rotations::Bool=false, strengthen::Bool=true)
+function positions_impl(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer, wd::Integer;strengthen::Bool=true)
     np = length(parts)
 
     # Generate the positions map
@@ -52,7 +52,7 @@ function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer
     return houghmap
 end
 
-function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer, wd::Integer; rotations::Bool=true, strengthen::Bool=true)
+function positions_impl_rot(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer, wd::Integer; strengthen::Bool=true)
     np = length(parts)
 
     # Generate the positions map
@@ -76,13 +76,21 @@ function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer
     return houghmap
 end
 
+function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer, wd::Integer; rotations::Bool=false, strengthen::Bool=true)
+    if rotations
+        return positions_impl_rot(model, parts, bins, ht, wd; strengthen=strengthen)
+    else
+        return positions_impl(model, parts, bins, ht, wd; strengthen=strengthen)
+    end
+end
+
 """
 Given a solved position map, recover the indices of each object.
 """
-function positions⁻¹(valmap::Array{Float64,4}; rotations::Bool=false)
+
+function positions⁻¹_helper(valmap::Array{Float64,4})
     np, _, _, _ = size(valmap)
     # Extract the result:
-    @assert !rotations
     coords = Vector{CartesianIndex{3}}(undef, np)
 
     # TODO: Write this using a single call to findall and sorting by first coordinate.
@@ -95,7 +103,7 @@ function positions⁻¹(valmap::Array{Float64,4}; rotations::Bool=false)
     return coords
 end
 
-function positions⁻¹(valmap::Array{Float64,4}; rotations::Bool=true)
+function positions⁻¹_helper_rot(valmap::Array{Float64,4})
     np, _, _, _ = size(valmap)
     # Extract the result:
     @assert !rotations
@@ -109,6 +117,15 @@ function positions⁻¹(valmap::Array{Float64,4}; rotations::Bool=true)
 
     return coords
 end
+
+function positions⁻¹(valmap::Array{Float64,4}; rotations::Bool=false)
+    if rotations
+        return positions⁻¹_helper_rot(valmap)
+    else
+        return positions⁻¹_helper(valmap)
+    end
+end
+
 
 """
 Given a problem, finds initial bounds on the number of bins:

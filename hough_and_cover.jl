@@ -11,7 +11,7 @@ Construct a delta-map of the space, such that:
 By factoring the problem this way, we can establish the same objective with
 fewer conditions.
 """
-function delta_transform(model::Model, parts::Vector{Rect}, houghmap)
+function delta_transform_impl(model::Model, parts::Vector{Rect}, houghmap)
     (np, bins, ht, wd) = size(houghmap)
     # Now we compute a delta-map of shape [np, bins, ht, wd], where
     # iff object k is at (i, j) in bin q, the value:
@@ -50,6 +50,21 @@ function delta_transform(model::Model, parts::Vector{Rect}, houghmap)
     return deltamap
 end
 
+function delta_transform(model::Model, parts::Vector{Rect}, houghmap; rotations::Bool=false)
+    if rotations
+        newparts = []
+        for p in parts
+            push!(newparts, p)
+            push!(newparts, Rect(p.h, p.w))
+        end
+        return delta_transform_impl(model, newparts, houghmap)
+    else
+        return delta_transform_impl(model, parts, houghmap)
+
+    end
+
+end
+
 abstract type RunningSumMode end
 struct Naïve <: RunningSumMode end
 struct Incremental <: RunningSumMode end
@@ -62,6 +77,8 @@ that cell. We wish to find an assignment of objects that are non-overlapping,
 and we achieve that by constraining all cells to be at most one.
 """
 function runningsum(model::Model, deltamap; mode::Naïve)
+    @assert false # Don't use this method!
+
     # Compute the running sum using the naïve method.
     _, bins, ht, wd = size(deltamap)
     # The <= 1 constraint is what prevents objects overlapping:
