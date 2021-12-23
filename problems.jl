@@ -103,6 +103,6 @@ function build_problems_nqsq(b::Int, n::Int)
     @assert b > 1
 
     return [
-        Problem(0, b, n, 0, 0, b-1, b, [Rect(i-1, i) for i in 2:n], true)
+        Problem(0, b, n, 0, 0, b, b+1, [Rect(i, i+1) for i in 1:n], true)
     ]
 end

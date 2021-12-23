@@ -98,20 +98,20 @@ end
         help="which question(s) to evaluate in the file"
         nargs='*'
         arg_type=Int
-        action = :store_arg
+        action=:store_arg
 end
 
 @add_arg_table settings["nqsq"] begin
     "binsize"
-        help="the size of the bin, as (binsize-1, binsize)"
+        help="the size of the bin, as (binsize, binsize+1)"
         arg_type=Int
         required=true
         action=:store_arg
     "maxn"
-        help="the largest not quite square, as (maxn-1, maxn)"
+        help="the largest not quite square, as (maxn, maxn+1)"
         arg_type=Int
         required=true
-        action = :store_arg
+        action=:store_arg
 end
 
 
@@ -125,6 +125,7 @@ elseif parsed_args["%COMMAND%"] == "basicrot"
     main([hough_and_cover], build_problems_basicrot())
 
 elseif parsed_args["%COMMAND%"] == "unibo"
+    parsed_args = parsed_args["unibo"]
     problems = build_problems_unibo(;filenames=[parsed_args["filename"]])
     idxes = parsed_args["number"]
     if length(idxes) == 0
@@ -136,10 +137,10 @@ elseif parsed_args["%COMMAND%"] == "unibo"
     main([hough_and_cover, positions_and_covering], problems[idxes])
 
 elseif parsed_args["%COMMAND%"] == "nqsq"
-    binsize = parsed_args["binsize"]
-    binsize = parsed_args["maxn"]
-    problems = build_problems_nqsq(parsed_args["binsize"], parsed_args["maxn"])
+    binsize = parsed_args["nqsq"]["binsize"]
+    maxn = parsed_args["nqsq"]["maxn"]
+    problems = build_problems_nqsq(binsize, maxn)
 
-    main([hough_and_cover, positions_and_covering], problems[idxes])
+    main([hough_and_cover], problems)
 
 end
