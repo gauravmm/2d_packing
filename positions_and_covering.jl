@@ -14,13 +14,13 @@ include("types.jl")
 Constructs and constraints a starting position map.
 """
 function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer, wd::Integer;
-    strengthen::Bool=true, bin_symmetry_break::Bool=true)
-
+    strengthen::Bool=false, symmetry_break::Bool=false, ordering::Bool=false)
     np = length(parts)
 
     # Generate the positions map
     @variable(model, houghmap[1:np, 1:bins, 1:ht, 1:wd], binary=true, base_name="houghmap")
-    @variable(model, supply[1:np], binary=true, base_name="houghmap")
+    @variable(model, supply[1:np], binary=true, base_name="supply")
+    @variable(model, bin_filled[1:bins], binary=true, base_name="bin_filled")
 
     for k in 1:np
         # Maximum positions at which the top-left of the object can be placed:
@@ -31,12 +31,24 @@ function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer
         @constraint(model, houghmap[k,:,:,(maxx + 1):wd] .== 0)
 
         # We compute the supply of each object:
-        @constraint(model, supply[k] == sum(houghmap[k,:,1:maxy,1:maxx]))
+        @constraint(model, supply[k] .>= sum(houghmap[k,:,1:maxy,1:maxx]))
 
-        # If bin_symmetry_break is true, then we break the symmetry around the assignment of
+        # If symmetry_break is true, then we break the symmetry around the assignment of
         # objects to bins by allowing object i to only be assigned to bins [1..i].
-        if bin_symmetry_break && (k < bins)
+        if symmetry_break && (k < bins)
             @constraint(model, houghmap[k,(k+1):bins,:,:] .== 0)
+        end
+    end
+
+    if ordering
+        # Force bins to be filled in order, used to break symmetry in the problem.
+        for b in 1:bins
+            # bin_filled[b] is 1 if any element in bin b is set.
+            @constraint(model, bin_filled[b] .>= houghmap[:,b,:,:])
+            # bin_filled[b] can only be 1 if bin_filled[b-1] is 1
+            if b > 1
+                @constraint(model, bin_filled[b] <= bin_filled[b-1])
+            end
         end
     end
 
@@ -170,7 +182,8 @@ Run P&C (or H&C) across a range of bins, increasing the bin size on each failure
 function solver_incremental(prob::Problem; known_bins::Int = 0,
                     solver_func=positions_and_covering,
                     optimizer=Gurobi.Optimizer,
-                    preprocessor::Bool=true,
+                    preprocessor::Bool=false,
+                    bin_stride::Int=4,
                     timeout=Inf)
     start_time = time_ns()
 
@@ -187,7 +200,7 @@ function solver_incremental(prob::Problem; known_bins::Int = 0,
     end
 
     bins = lb
-    while bins <= ub
+    while bins + bin_stride <= ub
         last_time = time_ns()
 
         time_spent = (last_time - start_time)*10^-9
@@ -199,20 +212,20 @@ function solver_incremental(prob::Problem; known_bins::Int = 0,
         end
 
         model = Model(optimizer)
-        retval = solver_func(model, prob, bins; timeout=timeout<=0 ? -1 : timeout - time_spent)
+        retval = solver_func(model, prob, bins + bin_stride; timeout=timeout<=0 ? -1 : timeout - time_spent)
 
         if !isnothing(retval)
             # We have a solution!
             end_time = time_ns()
             positions, rotations = retval
-            rv = Solution(true, bins, positions, rotations, end_time - start_time, end_time - last_time)
+            rv = Solution(true, bins + bin_stride, positions, rotations, end_time - start_time, end_time - last_time)
 
             if preprocessor
                 rv = preprocess⁻¹(prob, rv)
             end
             return rv
         end
-        bins += 1
+        bins += bin_stride
     end
     println("Oops! We failed to find a solution with bins in ($lb, $ub)")
     return nothing

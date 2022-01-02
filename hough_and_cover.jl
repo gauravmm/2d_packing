@@ -111,7 +111,7 @@ This implements Hough and Cover (H&C), which is a derivative of Positions and Co
 
 We use the Hough transform (equivalent to Positions step of P&C) and use a cumulative-sum map to ensure no collisions exist. The use of a running-sum map (and appropriate pre-transformation) allows us to greatly reduce the number of conditions.
 """
-function hough_and_cover(model::Model, problem::Problem, bins::Int;
+function hough_and_cover(model::Model, problem::Problem, bins::Integer;
         runsummode::RunningSumMode=Incremental(), timeout::Float64=Inf,
         prep::Bool=true)
 
