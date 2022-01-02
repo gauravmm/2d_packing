@@ -13,7 +13,9 @@ include("types.jl")
 """
 Constructs and constraints a starting position map.
 """
-function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer, wd::Integer;strengthen::Bool=true)
+function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer, wd::Integer;
+    strengthen::Bool=true, bin_symmetry_break::Bool=true)
+
     np = length(parts)
 
     # Generate the positions map
@@ -30,6 +32,12 @@ function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer
 
         # We compute the supply of each object:
         @constraint(model, supply[k] == sum(houghmap[k,:,1:maxy,1:maxx]))
+
+        # If bin_symmetry_break is true, then we break the symmetry around the assignment of
+        # objects to bins by allowing object i to only be assigned to bins [1..i].
+        if bin_symmetry_break && (k < bins)
+            @constraint(model, houghmap[k,(k+1):bins,:,:] .== 0)
+        end
     end
 
     # If strengthen is true, then we implement the "strengthening the convex polytope"
@@ -162,13 +170,22 @@ Run P&C (or H&C) across a range of bins, increasing the bin size on each failure
 function solver_incremental(prob::Problem; known_bins::Int = 0,
                     solver_func=positions_and_covering,
                     optimizer=Gurobi.Optimizer,
+                    preprocessor::Bool=true,
                     timeout=Inf)
+    start_time = time_ns()
+
+    original_problem = prob
+    if preprocessor
+        @assert !prob.rotations
+        prob = preprocess(prob)
+        println("|> Preprocessor time: $((time_ns() - start_time)*10^-9) s")
+    end
+
     lb, ub = bin_bounds(prob)
     if known_bins > 0
         lb, ub = known_bins
     end
 
-    start_time = time_ns()
     bins = lb
     while bins <= ub
         last_time = time_ns()
@@ -188,7 +205,12 @@ function solver_incremental(prob::Problem; known_bins::Int = 0,
             # We have a solution!
             end_time = time_ns()
             positions, rotations = retval
-            return Solution(true, bins, positions, rotations, end_time - start_time, end_time - last_time)
+            rv = Solution(true, bins, positions, rotations, end_time - start_time, end_time - last_time)
+
+            if preprocessor
+                rv = preprocess⁻¹(prob, rv)
+            end
+            return rv
         end
         bins += 1
     end
