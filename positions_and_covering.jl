@@ -14,13 +14,12 @@ include("types.jl")
 Constructs and constraints a starting position map.
 """
 function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer, wd::Integer;
-    strengthen::Bool=false, symmetry_break::Bool=false, ordering::Bool=false)
+    strengthen::Bool=true, symmetry_break::Bool=true, ordering::Bool=true)
     np = length(parts)
 
     # Generate the positions map
     @variable(model, houghmap[1:np, 1:bins, 1:ht, 1:wd], binary=true, base_name="houghmap")
     @variable(model, supply[1:np], binary=true, base_name="supply")
-    @variable(model, bin_filled[1:bins], binary=true, base_name="bin_filled")
 
     for k in 1:np
         # Maximum positions at which the top-left of the object can be placed:
@@ -31,7 +30,7 @@ function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer
         @constraint(model, houghmap[k,:,:,(maxx + 1):wd] .== 0)
 
         # We compute the supply of each object:
-        @constraint(model, supply[k] .>= sum(houghmap[k,:,1:maxy,1:maxx]))
+        @constraint(model, supply[k] == sum(houghmap[k,:,1:maxy,1:maxx]))
 
         # If symmetry_break is true, then we break the symmetry around the assignment of
         # objects to bins by allowing object i to only be assigned to bins [1..i].
@@ -41,6 +40,7 @@ function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer
     end
 
     if ordering
+        @variable(model, bin_filled[1:bins], binary=true, base_name="bin_filled")
         # Force bins to be filled in order, used to break symmetry in the problem.
         for b in 1:bins
             # bin_filled[b] is 1 if any element in bin b is set.
@@ -182,7 +182,7 @@ Run P&C (or H&C) across a range of bins, increasing the bin size on each failure
 function solver_incremental(prob::Problem; known_bins::Int = 0,
                     solver_func=positions_and_covering,
                     optimizer=Gurobi.Optimizer,
-                    preprocessor::Bool=false,
+                    preprocessor::Bool=true,
                     bin_stride::Int=4,
                     timeout=Inf)
     start_time = time_ns()
@@ -200,7 +200,7 @@ function solver_incremental(prob::Problem; known_bins::Int = 0,
     end
 
     bins = lb
-    while bins + bin_stride <= ub
+    while bins <= ub
         last_time = time_ns()
 
         time_spent = (last_time - start_time)*10^-9
