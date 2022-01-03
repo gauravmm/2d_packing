@@ -8,19 +8,20 @@ using JuMP
 import Gurobi
 
 include("types.jl")
+include("preprocessor.jl")
 
 
 """
 Constructs and constraints a starting position map.
 """
 function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer, wd::Integer;
-    strengthen::Bool=true, symmetry_break::Bool=true, ordering::Bool=true)
+    strengthen::Bool=true, symmetry_break::Bool=false, ordering::Bool=true, incompatible::Bool=true, incompatible_clique::Bool=true)
     np = length(parts)
 
     # Generate the positions map
     @variable(model, houghmap[1:np, 1:bins, 1:ht, 1:wd], binary=true, base_name="houghmap")
     @variable(model, supply[1:np], binary=true, base_name="supply")
-
+    
     for k in 1:np
         # Maximum positions at which the top-left of the object can be placed:
         maxy = (ht - parts[k].h + 1)
@@ -35,21 +36,25 @@ function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer
         # If symmetry_break is true, then we break the symmetry around the assignment of
         # objects to bins by allowing object i to only be assigned to bins [1..i].
         if symmetry_break && (k < bins)
+            @assert !incompatible_clique # We can't do this if we're using the incompatible_clique trick.
             @constraint(model, houghmap[k,(k+1):bins,:,:] .== 0)
         end
     end
-
-    if ordering
-        @variable(model, bin_filled[1:bins], binary=true, base_name="bin_filled")
-        # Force bins to be filled in order, used to break symmetry in the problem.
-        for b in 1:bins
-            # bin_filled[b] is 1 if any element in bin b is set.
-            @constraint(model, bin_filled[b] .>= houghmap[:,b,:,:])
-            # bin_filled[b] can only be 1 if bin_filled[b-1] is 1
-            if b > 1
-                @constraint(model, bin_filled[b] <= bin_filled[b-1])
-            end
+    
+    if incompatible
+        incomp = incompatibles(model, houghmap, parts, bins, ht, wd)
+        # If incompatible_clique is set, then we force the assignment of each object in the maximal
+        # clique to the corresponding bin.
+        if incompatible_clique
+            @assert !symmetry_break
+            force_assignments(model, houghmap, bins, incomp[:maximal_clique])
         end
+    end
+
+    # Force bins to be filled in order
+    bin_filled=nothing
+    if ordering
+        bin_filled = ordered_bins(model, houghmap, bins)
     end
 
     # If strengthen is true, then we implement the "strengthening the convex polytope"
@@ -63,7 +68,64 @@ function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer
         end
     end
 
-    return houghmap, supply
+    return (houghmap=houghmap, supply=supply, bin_filled=bin_filled)
+end
+
+# Prevent mutually incompatible objects from being assigned to the same bin.
+# First we create a variable to track bin assignment:
+function incompatibles(model, houghmap, parts, bins, ht, wd)
+    np = length(parts)
+    conf, max_clique = conflicts(parts, ht, wd)
+
+    @variable(model, binassign[1:np, 1:bins], binary=true, base_name="binassign")
+    for b in 1:bins
+        for k in 1:np
+            # Binassign (k,b) is 1 if object k is assigned to bin b
+            @constraint(model, binassign[k,b] == sum(houghmap[k,b,:,:]))
+        end
+    end
+    # Then we prevent mutual assignment:
+    for e in edges(conf)
+        for b in 1:bins
+            # For each bin, prevent both the source and destination from being set.
+            @constraint(model, binassign[src(e),b] + binassign[dst(e),b] <= 1)
+        end
+    end
+
+    return (binassign=binassign, conflict_graph=conf, maximal_clique=max_clique)
+end
+
+# Force maximal clique assignments:
+function force_assignments(model, houghmap, bins, max_clique)
+    for (force_bin, k) in enumerate(max_clique)
+        # This should never be violated! If it is, then we need a better lower bound estimator.
+        @assert (force_bin <= bins)
+        # If object k is in the maximal clique and force_bin is set then we can assign object
+        # k to bin force_bin
+
+        # Not before force_bin
+        if force_bin > 1
+            @constraint(model, houghmap[k,1:(force_bin-1),:,:] .== 0)
+        end
+        # Not after force_bin
+        if force_bin < bins
+            @constraint(model, houghmap[k,force_bin+1:bins,:,:] .== 0)
+        end
+    end
+end
+
+function ordered_bins(model, houghmap, bins)
+    @variable(model, bin_filled[1:bins], binary=true, base_name="bin_filled")
+    # Force bins to be filled in order, used to break symmetry in the problem.
+    for b in 1:bins
+        # bin_filled[b] is 1 if any element in bin b is set.
+        @constraint(model, bin_filled[b] .>= houghmap[:,b,:,:])
+        # bin_filled[b] can only be 1 if bin_filled[b-1] is 1
+        if b > 1
+            @constraint(model, bin_filled[b] <= bin_filled[b-1])
+        end
+    end
+    @objective(model, Min, sum(bin_filled))
 end
 
 """
@@ -157,9 +219,10 @@ function positions_and_covering(model::Model, problem::Problem, bins::Int;
     @assert !rotations # Don't support rotations for now.
 
     # houghmap contains x^i_{jk} from the P&C paper
-    houghmap, supply = positions(model, problem.parts, bins, problem.bin_h, problem.bin_w)
+    pos = positions(model, problem.parts, bins, problem.bin_h, problem.bin_w)
+    houghmap = pos[:houghmap]
     # supply[k] is the number of times object k appears:
-    @constraint(model, supply .== 1)
+    @constraint(model, pos[:supply] .== 1)
 
     # covermap contains C, the correspondence matrix
     covermap = covering(model, problem.parts, houghmap)
@@ -191,7 +254,7 @@ function solver_incremental(prob::Problem; known_bins::Int = 0,
     if preprocessor
         @assert !prob.rotations
         prob = preprocess(prob)
-        println("|> Preprocessor time: $((time_ns() - start_time)*10^-9) s")
+        println("Preprocessor time: $((time_ns() - start_time)*10^-9) s")
     end
 
     lb, ub = bin_bounds(prob)
@@ -218,7 +281,7 @@ function solver_incremental(prob::Problem; known_bins::Int = 0,
             # We have a solution!
             end_time = time_ns()
             positions, rotations = retval
-            rv = Solution(true, bins + bin_stride, positions, rotations, end_time - start_time, end_time - last_time)
+            rv = Solution(true, maximum([p[1] for p in positions]), positions, rotations, end_time - start_time, end_time - last_time)
 
             if preprocessor
                 rv = preprocess⁻¹(prob, rv)

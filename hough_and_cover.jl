@@ -113,21 +113,23 @@ We use the Hough transform (equivalent to Positions step of P&C) and use a cumul
 """
 function hough_and_cover(model::Model, problem::Problem, bins::Integer;
         runsummode::RunningSumMode=Incremental(), timeout::Float64=Inf,
-        prep::Bool=true)
+        prep::Bool=true, adv_preproc::Bool=true)
 
     parts = problem.parts
     if problem.rotations
+        @assert !adv_preproc # Not compatible!
         # Expand parts to include rotations:
         parts = [parts; [Rect(p.h, p.w) for p in parts]]
     end
 
-    houghmap, supply = positions(model, parts, bins, problem.bin_h, problem.bin_w)
+    pos = positions(model, parts, bins, problem.bin_h, problem.bin_w)
+    houghmap = pos[:houghmap]
     if problem.rotations
         np = length(problem.parts)
         # We want exactly one of the oriented object and its rotation:
-        @constraint(model, supply[1:np] .+ supply[np+1:2*np] .== 1)
+        @constraint(model, pos[:supply][1:np] .+ pos[:supply][np+1:2*np] .== 1)
     else
-        @constraint(model, supply .== 1)
+        @constraint(model, pos[:supply] .== 1)
     end
 
     deltamap = delta_transform(model, parts, houghmap)

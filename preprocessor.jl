@@ -1,9 +1,13 @@
 # Preprocess the problem based on Section 4 of Combinatorial Benders Decomposition (BD) paper.
 
 using Test
+using Graphs
 
 include("types.jl")
 
+#
+# Bin and Object scaling clique
+#
 
 function preprocess(prob::Problem)
     # Repeat until no further changes.
@@ -97,3 +101,28 @@ end
 #     @test all(compute_possible_lengths([1, 2, 4], 8) .== [0 1 0 1 0 1 0 0; 1 0 0 1 1 0 0 0; 1 1 1 0 0 0 0 0; 1 1 1 1 1 1 1 0])
 #     @test all(compute_possible_lengths([2, 3, 5], 5) .== [0 0 1 0 1; 0 1 0 0 1; 0 1 1 0 1; 0 1 1 0 1])
 # end;
+
+#
+# Incompatible Items and Maximal Incompatible Clique
+#
+
+function conflicts(parts::Vector{Rect}, bin_h::Integer, bin_w::Integer)
+    g = SimpleGraph(length(parts))
+    np = length(parts)
+
+    if np <= 1
+        return (g, [])
+    end
+
+    for i in 1:(np - 1)
+        for j in (i+1):np
+            if (parts[i].w + parts[j].w) > bin_w && (parts[i].h + parts[j].h) > bin_h
+                # Undirected graph:
+                add_edge!(g, i, j)
+            end
+        end
+    end
+
+    cliques = sort!(maximal_cliques(g), by=length, rev=true)
+    return (g, cliques[1])
+end
