@@ -111,7 +111,7 @@ function conflicts(parts::Vector{Rect}, bin_h::Integer, bin_w::Integer)
     np = length(parts)
 
     if np <= 1
-        return (g, [])
+        return []
     end
 
     for i in 1:(np - 1)
@@ -123,6 +123,5 @@ function conflicts(parts::Vector{Rect}, bin_h::Integer, bin_w::Integer)
         end
     end
 
-    cliques = sort!(maximal_cliques(g), by=length, rev=true)
-    return (g, cliques[1])
+    return sort(maximal_cliques(g), by=length, rev=true)
 end

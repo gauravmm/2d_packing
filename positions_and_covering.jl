@@ -40,7 +40,7 @@ function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer
             @constraint(model, houghmap[k,(k+1):bins,:,:] .== 0)
         end
     end
-    
+
     if incompatible
         incomp = incompatibles(model, houghmap, parts, bins, ht, wd)
         # If incompatible_clique is set, then we force the assignment of each object in the maximal
@@ -52,7 +52,7 @@ function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer
     end
 
     # Force bins to be filled in order
-    bin_filled=nothing
+    bin_filled = nothing
     if ordering
         bin_filled = ordered_bins(model, houghmap, bins)
     end
@@ -75,7 +75,7 @@ end
 # First we create a variable to track bin assignment:
 function incompatibles(model, houghmap, parts, bins, ht, wd)
     np = length(parts)
-    conf, max_clique = conflicts(parts, ht, wd)
+    cliques = conflicts(parts, ht, wd)
 
     @variable(model, binassign[1:np, 1:bins], binary=true, base_name="binassign")
     for b in 1:bins
@@ -85,14 +85,14 @@ function incompatibles(model, houghmap, parts, bins, ht, wd)
         end
     end
     # Then we prevent mutual assignment:
-    for e in edges(conf)
+    for clique in cliques
         for b in 1:bins
-            # For each bin, prevent both the source and destination from being set.
-            @constraint(model, binassign[src(e),b] + binassign[dst(e),b] <= 1)
+            # For each bin, prevent more than one element from the clique to be set.
+            @constraint(model, sum(binassign[clique,b]) <= 1)
         end
     end
 
-    return (binassign=binassign, conflict_graph=conf, maximal_clique=max_clique)
+    return (binassign=binassign, maximal_clique=get(cliques, 1, []))
 end
 
 # Force maximal clique assignments:

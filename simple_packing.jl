@@ -25,7 +25,7 @@ function main(solvers, problems; timeout_factor=5, initial_timeout=1000)
                 println("\n|> $(String(Symbol(solver)))\t$(problems[i].seq)\t$(problems[i].problem_class)\tNO SOLUTION")
             else
                 verify = check_solution(prob, soln)
-                println("\n|> $(String(Symbol(solver)))\t$(problems[i].seq)\t$(problems[i].problem_class)\t$(verify)\t$(soln.bins)\t$(round(soln.total_time / 10^6)/1000) s")
+                println("\n|> $(String(Symbol(solver)))\t$(problems[i].seq)\t$(problems[i].problem_class)\t$(verify)\t$(soln.bins)\t$(round(soln.total_time*10^-6)/1000) s")
                 best_time = min(best_time, soln.total_time*10^-9)
             end
         end
