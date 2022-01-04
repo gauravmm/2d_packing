@@ -1,4 +1,4 @@
-# Preprocess the problem based on Section 4 of Combinatorial Benders Decomposition (BD) paper.
+# Preprocess the problem based (partially) on Section 4 of Combinatorial Benders Decomposition (BD) paper.
 
 using Test
 using Graphs
@@ -8,7 +8,6 @@ include("types.jl")
 #
 # Bin and Object scaling clique
 #
-
 function preprocess(prob::Problem)
     # Repeat until no further changes.
     while true
