@@ -26,3 +26,8 @@ struct Solution
     total_time::Float64
     last_time::Float64
 end
+
+function convert(::CartesianIndex{T}, x::Union{Nothing,CartesianIndex{T}}) where T <: Integer
+    @assert !isnothing(x)
+    return x
+end
