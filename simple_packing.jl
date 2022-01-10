@@ -134,7 +134,7 @@ elseif parsed_args["%COMMAND%"] == "unibo"
     end
 
     println("Requested problems $idxes")
-    main([hough_and_cover, positions_and_covering], problems[idxes])
+    main([hough_and_cover,], problems[idxes])
 
 elseif parsed_args["%COMMAND%"] == "nqsq"
     binsize = parsed_args["nqsq"]["binsize"]

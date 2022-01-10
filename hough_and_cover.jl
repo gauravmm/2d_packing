@@ -122,7 +122,7 @@ function hough_and_cover(model::Model, problem::Problem, bins::Integer;
         parts = [parts; [Rect(p.h, p.w) for p in parts]]
     end
 
-    pos = positions(model, parts, bins, problem.bin_h, problem.bin_w)
+    pos = positions(model, parts, bins, problem.bin_h, problem.bin_w; incompatible=false, incompatible_clique=false, ordering=false, strengthen=true)
     houghmap = pos[:houghmap]
     if problem.rotations
         np = length(problem.parts)
