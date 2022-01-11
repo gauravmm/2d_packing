@@ -1,9 +1,9 @@
 #!/bin/bash
 
-for FILEN in 01 02 04 10 09 08 07 06 05 03
+for FILEN in 09
 do
-    for PROB in {1..10}
+    for PROB in {11..50}
     do
-        echo julia simple_packing.jl "data/unibo/Class_${FILEN}.2bp" "$PROB" | tee "preproc-class$FILEN-prob$PROB.txt"
+        timeout -k 60s 2060s julia simple_packing.jl unibo "data/unibo/Class_${FILEN}.2bp" "$PROB" | tee "../output_preproc/run-class$FILEN-prob$PROB.txt"
     done
 done
