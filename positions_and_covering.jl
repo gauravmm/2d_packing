@@ -101,11 +101,11 @@ end
 # Force maximal clique assignments:
 function force_assignments(model, houghmap, bins, max_clique)
     for (force_bin, k) in enumerate(max_clique)
-        if bins >= force_bin
+        if bins < force_bin
             # We need a better lower bound estimator. For now, just thow an exception so we can skip ahead.
             throw(InsufficientBins())
         end
-        @assert (force_bin <= bins)
+        @assert (bins >= force_bin)
         # If object k is in the maximal clique and force_bin is set then we can assign object
         # k to bin force_bin
 
