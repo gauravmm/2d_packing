@@ -95,10 +95,16 @@ function incompatibles(model, houghmap, parts, bins, ht, wd)
     return (binassign=binassign, maximal_clique=get(cliques, 1, []))
 end
 
+struct InsufficientBins <: Exception
+end
+
 # Force maximal clique assignments:
 function force_assignments(model, houghmap, bins, max_clique)
     for (force_bin, k) in enumerate(max_clique)
-        # This should never be violated! If it is, then we need a better lower bound estimator.
+        if bins >= force_bin
+            # We need a better lower bound estimator. For now, just thow an exception so we can skip ahead.
+            throw(InsufficientBins())
+        end
         @assert (force_bin <= bins)
         # If object k is in the maximal clique and force_bin is set then we can assign object
         # k to bin force_bin
@@ -275,18 +281,25 @@ function solver_incremental(prob::Problem; known_bins::Int = 0,
         end
 
         model = Model(optimizer)
-        retval = solver_func(model, prob, bins + bin_stride; timeout=timeout<=0 ? -1 : timeout - time_spent)
+        try
+            retval = solver_func(model, prob, bins + bin_stride; timeout=timeout<=0 ? -1 : timeout - time_spent)
 
-        if !isnothing(retval)
-            # We have a solution!
-            end_time = time_ns()
-            positions, rotations = retval
-            rv = Solution(true, maximum([p[1] for p in positions]), positions, rotations, end_time - start_time, end_time - last_time)
+            if !isnothing(retval)
+                # We have a solution!
+                end_time = time_ns()
+                positions, rotations = retval
+                rv = Solution(true, maximum([p[1] for p in positions]), positions, rotations, end_time - start_time, end_time - last_time)
 
-            if preprocessor
-                rv = preprocess⁻¹(prob, rv)
+                if preprocessor
+                    rv = preprocess⁻¹(prob, rv)
+                end
+                return rv
             end
-            return rv
+        catch e
+            if !isa(e, InsufficientBins)
+                rethrow(e)
+            end
+            print("Insufficient bins! Skipping ahead.")
         end
         bins += bin_stride
     end
