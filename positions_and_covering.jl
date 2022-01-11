@@ -161,7 +161,7 @@ end
 """
 Given a problem, finds initial bounds on the number of bins:
 """
-function bin_bounds(problem::Problem)
+function bin_bounds(problem::Problem; preproc_lb::Bool=true)
     area_per_bin = problem.bin_h * problem.bin_w
     area_objects = sum([r.w * r.h for r in problem.parts])
 
@@ -175,6 +175,23 @@ function bin_bounds(problem::Problem)
     # each bin is slightly more than half full along each axis.
     # In higher-dimensional problems, this gets exponentially worse.
     upper_bound = 4*lower_bound
+
+    if preproc_lb
+        # Use the preprocessing to find a new lower bound:
+        preproc_prob = preprocess(problem)
+
+        cliques = conflicts(preproc_prob.parts, preproc_prob.bin_h, preproc_prob.bin_w)
+        if length(cliques) >= 1
+            # We need to have at least as many bins as the largest clique
+            if length(cliques[1]) > lower_bound
+                lower_bound = length(cliques[1])
+                println("Set the lower bound to largest clique: $lower_bound.")
+                if lower_bound > upper_bound
+                    println("|> LOWER BOUND $lower_bound > UPPER BOUND $upper_bound")
+                end
+            end
+        end
+    end
 
     return (lower_bound, upper_bound)
 end
