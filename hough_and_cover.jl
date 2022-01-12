@@ -138,7 +138,7 @@ function hough_and_cover(model::Model, problem::Problem, bins::Integer;
     runsum = runningsum(model, deltamap; mode=runsummode)
 
     if dump_model
-        println("|>     Problem constructed in $((time_ns() - construc_ns)*10^-6) s")
+        println("|>     Problem constructed in $((time_ns() - construc_ns)*10^-9) s")
         write_to_file(model, "model-hnc-$(problem.problem_class)-$(problem.rel_inst).lp.gz")
         throw(OutputToFileDone())
     end

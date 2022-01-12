@@ -259,7 +259,7 @@ function positions_and_covering(model::Model, problem::Problem, bins::Int;
     covermap = covering(model, problem.parts, houghmap)
 
     if dump_model
-        println("|>     Problem constructed in $((time_ns() - construc_ns)*10^-6) s")
+        println("|>     Problem constructed in $((time_ns() - construc_ns)*10^-9) s")
         write_to_file(model, "model-pnc-$(problem.problem_class)-$(problem.rel_inst).lp.gz")
         throw(OutputToFileDone())
     end
