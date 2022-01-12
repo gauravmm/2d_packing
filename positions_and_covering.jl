@@ -260,7 +260,7 @@ function positions_and_covering(model::Model, problem::Problem, bins::Int;
 
     if dump_model
         println("|>     Problem constructed in $((time_ns() - construc_ns)*10^-9) s")
-        write_to_file(model, "model-pnc-$(problem.problem_class)-$(problem.rel_inst).lp.gz")
+        write_to_file(model, "model-pnc-$(problem.problem_class)-$(problem.abs_inst).lp.gz")
         throw(OutputToFileDone())
     end
 
