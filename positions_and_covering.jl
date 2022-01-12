@@ -240,9 +240,14 @@ end
 """
 This implements Positions and Covering (P&C)
 """
+struct OutputToFileDone <: Exception
+end
+
 function positions_and_covering(model::Model, problem::Problem, bins::Int;
-        rotations::Bool=false, timeout::Float64=Inf)
+        rotations::Bool=false, timeout::Float64=Inf, dump_model::Bool=false)
     @assert !rotations # Don't support rotations for now.
+
+    construc_ns = time_ns()
 
     # houghmap contains x^i_{jk} from the P&C paper
     pos = positions(model, problem.parts, bins, problem.bin_h, problem.bin_w)
@@ -252,6 +257,12 @@ function positions_and_covering(model::Model, problem::Problem, bins::Int;
 
     # covermap contains C, the correspondence matrix
     covermap = covering(model, problem.parts, houghmap)
+
+    if dump_model
+        println("|>     Problem constructed in $((time_ns() - construc_ns)*10^-6) s")
+        write_to_file(model, "model-pnc-$(problem.problem_class)-$(problem.rel_inst).lp.gz")
+        throw(OutputToFileDone())
+    end
 
     # Now that we have created the problem, we solve it:
     if isfinite(timeout)
@@ -273,7 +284,8 @@ function solver_incremental(prob::Problem; known_bins::Int = 0,
                     optimizer=CPLEX.Optimizer,
                     preprocessor::Bool=true,
                     bin_stride::Int=4,
-                    timeout=Inf)
+                    timeout=Inf,
+                    dump_model::Bool=false)
     start_time = time_ns()
 
     original_problem = prob
@@ -302,7 +314,18 @@ function solver_incremental(prob::Problem; known_bins::Int = 0,
 
         model = Model(optimizer)
         try
-            retval = solver_func(model, prob, bins + bin_stride; timeout=timeout<=0 ? -1 : timeout - time_spent)
+            retval=nothing
+            try
+                retval = solver_func(model, prob, bins + bin_stride; timeout=timeout<=0 ? -1 : timeout - time_spent, dump_model=dump_model)
+
+            catch e
+                if !isa(e, OutputToFileDone)
+                    rethrow(e)
+                end
+
+                # Output to file is done, return nothing
+                return nothing
+            end
 
             if !isnothing(retval)
                 # We have a solution!

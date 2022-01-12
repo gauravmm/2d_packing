@@ -8,7 +8,7 @@ import Test
 include("problems.jl")
 include("hough_and_cover.jl")
 
-function main(solvers, problems; timeout_factor=5, initial_timeout=1000)
+function main(solvers, problems; timeout_factor=5, initial_timeout=1000, dump_model::Bool=false)
     println("Burn-in test")
     for solver in solvers
         soln = solver_incremental(Problem(-1, 1, 1, 0, 0, 4, 4, [Rect(2, 2)], false), solver_func=solver)
@@ -20,7 +20,7 @@ function main(solvers, problems; timeout_factor=5, initial_timeout=1000)
     for (i, prob) in enumerate(problems)
         best_time = Inf
         for solver in solvers
-            soln = solver_incremental(problems[i], solver_func=solver; timeout= isfinite(best_time) ? best_time*timeout_factor : initial_timeout)
+            soln = solver_incremental(problems[i], solver_func=solver; timeout= isfinite(best_time) ? best_time*timeout_factor : initial_timeout, dump_model=dump_model)
             if isnothing(soln)
                 println("\n|> $(String(Symbol(solver)))\t$(problems[i].seq)\t$(problems[i].problem_class)\tNO SOLUTION")
             else
@@ -99,6 +99,9 @@ end
         nargs='*'
         arg_type=Int
         action=:store_arg
+    "--dump-model"
+        help="save to file instead of solving"
+        action=:store_true
 end
 
 @add_arg_table settings["nqsq"] begin
@@ -134,7 +137,7 @@ elseif parsed_args["%COMMAND%"] == "unibo"
     end
 
     println("Requested problems $idxes")
-    main([hough_and_cover, positions_and_covering], problems[idxes])
+    main([hough_and_cover, positions_and_covering], problems[idxes]; dump_model=parsed_args["dump-model"])
 
 elseif parsed_args["%COMMAND%"] == "nqsq"
     binsize = parsed_args["nqsq"]["binsize"]
