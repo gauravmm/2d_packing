@@ -3,9 +3,12 @@
 We observe that the _Positions_ in P&C is equivalent to the Hough transform, and so we
 re-use that primitive transform (and its inverse) in our Hough and Cover (H&C) approach.
 """
+# Set env for CPLEX:
+ENV["CPLEX_STUDIO_BINARIES"]="/opt/ibm/ILOG/CPLEX_Studio201/cplex/bin/x86-64_linux/"
 
 using JuMP
 import Gurobi
+import CPLEX
 
 include("types.jl")
 include("preprocessor.jl")
@@ -267,7 +270,7 @@ Run P&C (or H&C) across a range of bins, increasing the bin size on each failure
 """
 function solver_incremental(prob::Problem; known_bins::Int = 0,
                     solver_func=positions_and_covering,
-                    optimizer=Gurobi.Optimizer,
+                    optimizer=CPLEX.Optimizer,
                     preprocessor::Bool=true,
                     bin_stride::Int=4,
                     timeout=Inf)
