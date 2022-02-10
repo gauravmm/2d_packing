@@ -18,7 +18,7 @@ include("preprocessor.jl")
 Constructs and constraints a starting position map.
 """
 function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer, wd::Integer;
-    strengthen::Bool=true, symmetry_break::Bool=false, ordering::Bool=true, incompatible::Bool=true, incompatible_clique::Bool=true)
+    strengthen::Bool=true, symmetry_break::Bool=false, ordering::Bool=true, incompatible::Bool=false, incompatible_clique::Bool=false)
     np = length(parts)
 
     # Generate the positions map
