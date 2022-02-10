@@ -113,13 +113,12 @@ We use the Hough transform (equivalent to Positions step of P&C) and use a cumul
 """
 function hough_and_cover(model::Model, problem::Problem, bins::Integer;
         runsummode::RunningSumMode=Incremental(), timeout::Float64=Inf,
-        prep::Bool=true, adv_preproc::Bool=true, dump_model::Bool=false)
+        prep::Bool=true, dump_model::Bool=false)
 
     construc_ns = time_ns()
 
     parts = problem.parts
     if problem.rotations
-        @assert !adv_preproc # Not compatible!
         # Expand parts to include rotations:
         parts = [parts; [Rect(p.h, p.w) for p in parts]]
     end

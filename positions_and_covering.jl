@@ -281,11 +281,12 @@ Run P&C (or H&C) across a range of bins, increasing the bin size on each failure
 """
 function solver_incremental(prob::Problem; known_bins::Int = 0,
                     solver_func=positions_and_covering,
-                    optimizer=CPLEX.Optimizer,
+                    optimizer=Gurobi.Optimizer,
                     preprocessor::Bool=true,
                     bin_stride::Int=4,
                     timeout=Inf,
-                    dump_model::Bool=false)
+                    dump_model::Bool=false,
+                    exact_bins::Int=0)
     start_time = time_ns()
 
     original_problem = prob
@@ -300,8 +301,8 @@ function solver_incremental(prob::Problem; known_bins::Int = 0,
         lb, ub = known_bins
     end
 
-    bins = lb
-    while bins <= ub
+    bins = exact_bins > 0 ? exact_bins : lb
+    while (exact_bins > 0) || (bins <= ub)
         last_time = time_ns()
 
         time_spent = (last_time - start_time)*10^-9
@@ -316,7 +317,7 @@ function solver_incremental(prob::Problem; known_bins::Int = 0,
         try
             retval=nothing
             try
-                retval = solver_func(model, prob, bins + bin_stride; timeout=timeout<=0 ? -1 : timeout - time_spent, dump_model=dump_model)
+                retval = solver_func(model, prob, exact_bins > 0 ? exact_bins : bins + bin_stride; timeout=timeout<=0 ? -1 : timeout - time_spent, dump_model=dump_model)
 
             catch e
                 if !isa(e, OutputToFileDone)
@@ -343,6 +344,10 @@ function solver_incremental(prob::Problem; known_bins::Int = 0,
                 rethrow(e)
             end
             print("Insufficient bins! Skipping ahead.")
+        end
+        if exact_bins > 0
+            println("Oops! We failed to find a solution with exact number of bins $exact_bins.")
+            return nothing
         end
         bins += bin_stride
     end
