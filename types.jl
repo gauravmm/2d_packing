@@ -7,6 +7,7 @@ struct Rect
 end
 
 struct Problem
+    seq::Int32
     problem_class::Int32
     num::Int32
     rel_inst::Int32
@@ -14,4 +15,19 @@ struct Problem
     bin_w::Int32
     bin_h::Int32
     parts::Vector{Rect}
+    rotations::Bool
+end
+
+struct Solution
+    solved::Bool
+    bins::Int32
+    positions::Vector{CartesianIndex{3}}
+    rotations::Union{Vector{Bool}, Nothing}
+    total_time::Float64
+    last_time::Float64
+end
+
+function convert(::CartesianIndex{T}, x::Union{Nothing,CartesianIndex{T}}) where T <: Integer
+    @assert !isnothing(x)
+    return x
 end
