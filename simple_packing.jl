@@ -7,11 +7,12 @@ import Test
 
 include("problems.jl")
 include("hough_and_cover.jl")
+include("corner_coords.jl")
 
-function main(solvers, problems; timeout_factor=5, initial_timeout=1000)
+function main(solvers, problems; timeout_factor = 5, initial_timeout = 1000, dump_model::Bool = false)
     println("Burn-in test")
     for solver in solvers
-        soln = solver_incremental(Problem(-1, 1, 1, 0, 0, 4, 4, [Rect(2, 2)], false), solver_func=solver)
+        soln = solver_incremental(Problem(-1, 1, 1, 0, 0, 4, 4, [Rect(2, 2)], false), solver_func = solver)
         @assert !isnothing(soln)
         println("Compilation time $(String(Symbol(solver))): ~$(round(soln.total_time / 10^6)) ms")
     end
@@ -20,13 +21,13 @@ function main(solvers, problems; timeout_factor=5, initial_timeout=1000)
     for (i, prob) in enumerate(problems)
         best_time = Inf
         for solver in solvers
-            soln = solver_incremental(problems[i], solver_func=solver; timeout= isfinite(best_time) ? best_time*timeout_factor : initial_timeout)
+            soln = solver_incremental(problems[i], solver_func = solver; timeout = isfinite(best_time) ? best_time * timeout_factor : initial_timeout, dump_model = dump_model)
             if isnothing(soln)
                 println("\n|> $(String(Symbol(solver)))\t$(problems[i].seq)\t$(problems[i].problem_class)\tNO SOLUTION")
             else
                 verify = check_solution(prob, soln)
                 println("\n|> $(String(Symbol(solver)))\t$(problems[i].seq)\t$(problems[i].problem_class)\t$(verify)\t$(soln.bins)\t$(round(soln.total_time*10^-6)/1000) s")
-                best_time = min(best_time, soln.total_time*10^-9)
+                best_time = min(best_time, soln.total_time * 10^-9)
             end
         end
     end
@@ -59,7 +60,7 @@ function check_solution(prob::Problem, soln::Solution)
             println("|>     Coordinate out of bounds $bin, $i, $j")
         end
 
-        testarr[bin,i:(i+part_h-1),j:(j+part_w-1)] .+= 1
+        testarr[bin, i:(i+part_h-1), j:(j+part_w-1)] .+= 1
     end
 
     if length(soln.positions) != length(prob.parts)
@@ -76,42 +77,48 @@ end
 settings = ArgParseSettings()
 @add_arg_table settings begin
     "basic"
-        help="basic tests"
-        action=:command
+    help = "basic tests"
+    action = :command
     "basicrot"
-        help="basic rotation tests"
-        action=:command
+    help = "basic rotation tests"
+    action = :command
     "unibo"
-        help="run examples from the UNIBO dataset"
-        action=:command
+    help = "run examples from the UNIBO dataset"
+    action = :command
     "nqsq"
-        help="not quite squares (with rotations!)"
-        action=:command
+    help = "not quite squares (with rotations!)"
+    action = :command
 end
 
 @add_arg_table settings["unibo"] begin
     "filename"
-        help="2bp file to load"
-        required=true
-        action=:store_arg
+    help = "2bp file to load"
+    required = true
+    action = :store_arg
     "number"
-        help="which question(s) to evaluate in the file"
-        nargs='*'
-        arg_type=Int
-        action=:store_arg
+    help = "which question(s) to evaluate in the file"
+    nargs = '*'
+    arg_type = Int
+    action = :store_arg
+    "--dump-model"
+    help = "save to file instead of solving"
+    action = :store_true
 end
 
 @add_arg_table settings["nqsq"] begin
     "binsize"
-        help="the size of the bin, as (binsize, binsize+1)"
-        arg_type=Int
-        required=true
-        action=:store_arg
+    help = "the size of the bin, as (binsize, binsize+1)"
+    arg_type = Int
+    required = true
+    action = :store_arg
     "maxn"
-        help="the largest not quite square, as (maxn, maxn+1)"
-        arg_type=Int
-        required=true
-        action=:store_arg
+    help = "the largest not quite square, as (maxn, maxn+1)"
+    arg_type = Int
+    required = true
+    action = :store_arg
+    "--dump-model"
+    help = "save to file instead of solving"
+    action = :store_true
 end
 
 
@@ -126,7 +133,7 @@ elseif parsed_args["%COMMAND%"] == "basicrot"
 
 elseif parsed_args["%COMMAND%"] == "unibo"
     parsed_args = parsed_args["unibo"]
-    problems = build_problems_unibo(;filenames=[parsed_args["filename"]])
+    problems = build_problems_unibo(; filenames = [parsed_args["filename"]])
     idxes = parsed_args["number"]
     if length(idxes) == 0
         println("No number specified, running all")
@@ -134,13 +141,22 @@ elseif parsed_args["%COMMAND%"] == "unibo"
     end
 
     println("Requested problems $idxes")
-    main([hough_and_cover, positions_and_covering], problems[idxes])
+    main([hough_and_cover, positions_and_covering], problems[idxes]; dump_model = parsed_args["dump-model"])
 
 elseif parsed_args["%COMMAND%"] == "nqsq"
-    binsize = parsed_args["nqsq"]["binsize"]
-    maxn = parsed_args["nqsq"]["maxn"]
+    parsed_args = parsed_args["nqsq"]
+    binsize = parsed_args["binsize"]
+    maxn = parsed_args["maxn"]
     problems = build_problems_nqsq(binsize, maxn)
 
-    main([hough_and_cover], problems)
+    for solver in [corner_coords, hough_and_cover]
+        soln = solver_incremental(problems[1], solver_func = solver; preprocessor = false, timeout = 3600, dump_model = parsed_args["dump-model"], exact_bins = 1)
+        if isnothing(soln)
+            println("\n|> $(String(Symbol(solver)))\t$(problems[1].problem_class),$(problems[1].num)\tNQSQ\tNO SOLUTION")
+        else
+            verify = check_solution(problems[1], soln)
+            println("\n|> $(String(Symbol(solver)))\t$(problems[1].problem_class),$(problems[1].num)\tNQSQ\t$(verify)\t$(soln.bins)\t$(round(soln.total_time*10^-6)/1000) s")
+        end
+    end
 
 end

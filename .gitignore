@@ -1,3 +1,5 @@
+*.lp
+*.lp.gz
 *.lic
 *.txt
 .vscode/

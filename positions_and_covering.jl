@@ -3,9 +3,12 @@
 We observe that the _Positions_ in P&C is equivalent to the Hough transform, and so we
 re-use that primitive transform (and its inverse) in our Hough and Cover (H&C) approach.
 """
+# Set env for CPLEX:
+ENV["CPLEX_STUDIO_BINARIES"]="/opt/ibm/ILOG/CPLEX_Studio201/cplex/bin/x86-64_linux/"
 
 using JuMP
 import Gurobi
+import CPLEX
 
 include("types.jl")
 include("preprocessor.jl")
@@ -15,7 +18,7 @@ include("preprocessor.jl")
 Constructs and constraints a starting position map.
 """
 function positions(model::Model, parts::Vector{Rect}, bins::Integer, ht::Integer, wd::Integer;
-    strengthen::Bool=true, symmetry_break::Bool=false, ordering::Bool=true, incompatible::Bool=true, incompatible_clique::Bool=true)
+    strengthen::Bool=true, symmetry_break::Bool=false, ordering::Bool=true, incompatible::Bool=false, incompatible_clique::Bool=false)
     np = length(parts)
 
     # Generate the positions map
@@ -237,9 +240,14 @@ end
 """
 This implements Positions and Covering (P&C)
 """
+struct OutputToFileDone <: Exception
+end
+
 function positions_and_covering(model::Model, problem::Problem, bins::Int;
-        rotations::Bool=false, timeout::Float64=Inf)
+        rotations::Bool=false, timeout::Float64=Inf, dump_model::Bool=false)
     @assert !rotations # Don't support rotations for now.
+
+    construc_ns = time_ns()
 
     # houghmap contains x^i_{jk} from the P&C paper
     pos = positions(model, problem.parts, bins, problem.bin_h, problem.bin_w)
@@ -249,6 +257,12 @@ function positions_and_covering(model::Model, problem::Problem, bins::Int;
 
     # covermap contains C, the correspondence matrix
     covermap = covering(model, problem.parts, houghmap)
+
+    if dump_model
+        println("|>     Problem constructed in $((time_ns() - construc_ns)*10^-9) s")
+        write_to_file(model, "model-pnc-$(problem.problem_class)-$(problem.abs_inst).lp.gz")
+        throw(OutputToFileDone())
+    end
 
     # Now that we have created the problem, we solve it:
     if isfinite(timeout)
@@ -270,7 +284,9 @@ function solver_incremental(prob::Problem; known_bins::Int = 0,
                     optimizer=Gurobi.Optimizer,
                     preprocessor::Bool=true,
                     bin_stride::Int=4,
-                    timeout=Inf)
+                    timeout=Inf,
+                    dump_model::Bool=false,
+                    exact_bins::Int=0)
     start_time = time_ns()
 
     original_problem = prob
@@ -285,8 +301,8 @@ function solver_incremental(prob::Problem; known_bins::Int = 0,
         lb, ub = known_bins
     end
 
-    bins = lb
-    while bins <= ub
+    bins = exact_bins > 0 ? exact_bins : lb
+    while (exact_bins > 0) || (bins <= ub)
         last_time = time_ns()
 
         time_spent = (last_time - start_time)*10^-9
@@ -299,7 +315,18 @@ function solver_incremental(prob::Problem; known_bins::Int = 0,
 
         model = Model(optimizer)
         try
-            retval = solver_func(model, prob, bins + bin_stride; timeout=timeout<=0 ? -1 : timeout - time_spent)
+            retval=nothing
+            try
+                retval = solver_func(model, prob, exact_bins > 0 ? exact_bins : bins + bin_stride; timeout=timeout<=0 ? -1 : timeout - time_spent, dump_model=dump_model)
+
+            catch e
+                if !isa(e, OutputToFileDone)
+                    rethrow(e)
+                end
+
+                # Output to file is done, return nothing
+                return nothing
+            end
 
             if !isnothing(retval)
                 # We have a solution!
@@ -317,6 +344,10 @@ function solver_incremental(prob::Problem; known_bins::Int = 0,
                 rethrow(e)
             end
             print("Insufficient bins! Skipping ahead.")
+        end
+        if exact_bins > 0
+            println("Oops! We failed to find a solution with exact number of bins $exact_bins.")
+            return nothing
         end
         bins += bin_stride
     end
